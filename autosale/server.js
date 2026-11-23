@@ -208,9 +208,9 @@ const MIME = {
 };
 function serveStatic(req, res, pathname) {
   let rel = pathname;
-  if (rel === '/' || rel === '/landing' || rel === '/landing/') {
-    rel = rel === '/landing' || rel === '/landing/' ? '/landing/index.html' : '/index.html';
-  }
+  if (rel === '/') rel = '/index.html';
+  if (rel === '/landing' || rel === '/landing/') rel = '/landing/index.html';
+  if (rel === '/en' || rel === '/en/') rel = '/en/index.html';
   const full = path.normalize(path.join(ROOT, rel));
   if (!full.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(full, (err, data) => {
