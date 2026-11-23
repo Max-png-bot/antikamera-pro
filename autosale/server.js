@@ -549,7 +549,12 @@ function start() {
 
     /* живость для внешних аптайм-мониторов */
     if (u.pathname === '/healthz') {
-      return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), sales: loadJson(F.sales, []).length });
+      return json(res, 200, {
+        ok: true,
+        uptime: Math.round(process.uptime()),
+        sales: loadJson(F.sales, []).length,
+        telegramAlerts: !!(process.env.ALERT_TELEGRAM_TOKEN && process.env.ALERT_TELEGRAM_CHAT_ID),
+      });
     }
 
     if (u.pathname === '/api/stats') {
