@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="АнтиКамера">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<title>АнтиКамера PRO — детектор скрытых камер и электроники</title>
+<style>
+  :root{
+    --bg:#0b0f14; --card:#131a23; --card2:#1a2330; --line:#26313f;
+    --tx:#e8eef5; --tx2:#93a3b5; --acc:#ff9440; --bad:#ff4d4d; --blue:#4da3ff;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--tx);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    min-height:100%; overscroll-behavior:none}
+  .wrap{max-width:560px;margin:0 auto;padding:10px 12px calc(28px + env(safe-area-inset-bottom))}
+  header{display:flex;align-items:center;gap:10px;padding:6px 2px 10px}
+  header .logo{width:36px;height:36px;flex:none}
+  header h1{font-size:18px;margin:0;letter-spacing:.2px}
+  header .sub{font-size:11.5px;color:var(--tx2);margin-top:1px}
+  .chip{margin-left:auto;font-size:12px;padding:5px 10px;border-radius:999px;
+    background:var(--card2);border:1px solid var(--line);color:var(--tx2);white-space:nowrap}
+  .chip.run{color:#38d16a;border-color:#1d5c36}
+  .chip.alert{color:var(--bad);border-color:#6b2323;background:#2a1414}
+
+  .modeseg{display:flex;background:var(--card2);border:1px solid var(--line);
+    border-radius:13px;padding:4px;margin-bottom:10px}
+  .modeseg button{flex:1;border:0;background:transparent;color:var(--tx2);
+    padding:10px 6px;font-size:14.5px;border-radius:10px;font-weight:700}
+  .modeseg button.on{background:#233246;color:var(--tx)}
+  .modeseg button small{display:block;font-weight:500;font-size:10.5px;color:var(--tx2)}
+
+  .stage{position:relative;width:100%;aspect-ratio:4/3;background:#05070a;
+    border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .stage video,.stage canvas.src{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .stage canvas.ov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .stage .banner{position:absolute;left:10px;right:10px;top:10px;z-index:5;font-size:12px;
+    background:rgba(8,12,18,.8);border:1px solid var(--line);border-radius:10px;
+    padding:7px 10px;display:none;backdrop-filter:blur(4px)}
+  .stage .banner.show{display:block}
+  .stage .hint{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:22px 14px 12px;
+    font-size:12.5px;color:#cfe0f2;text-align:center;
+    background:linear-gradient(transparent,rgba(4,6,10,.92));pointer-events:none}
+  .stage .torchind{position:absolute;right:10px;top:10px;z-index:6;font-size:11px;color:var(--acc)}
+
+  .row{display:flex;gap:8px;margin-top:10px}
+  button{flex:1;border:1px solid var(--line);background:var(--card);color:var(--tx);
+    padding:12px 10px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer}
+  button:active{transform:translateY(1px)}
+  button.primary{background:linear-gradient(180deg,#ffa95c,#e56500);border-color:#8a4a00;color:#241000}
+  button.stop{background:#2a1515;border-color:#6b2323;color:#ff9d9d}
+  button:disabled{opacity:.45}
+  input[type=file]{display:none}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;margin-top:12px}
+  .card h3{margin:0 0 8px;font-size:13px;color:var(--tx2);font-weight:600;
+    text-transform:uppercase;letter-spacing:.6px}
+  .seg{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:3px}
+  .seg button{flex:1;border:0;background:transparent;color:var(--tx2);padding:9px 6px;
+    font-size:13.5px;border-radius:9px;font-weight:600}
+  .seg button.on{background:#233246;color:var(--tx)}
+  .slider{display:flex;align-items:center;gap:10px;margin-top:8px}
+  .slider input[type=range]{flex:1;accent-color:var(--acc)}
+  .slider .lbl{font-size:13px;color:var(--tx2);white-space:nowrap}
+  .slider .val{font-variant-numeric:tabular-nums;font-size:13px;color:var(--acc);width:56px;text-align:right}
+  label.ck{display:flex;gap:9px;align-items:center;margin-top:10px;font-size:14px;color:var(--tx)}
+  label.ck input{width:18px;height:18px;accent-color:var(--acc)}
+  input[type=range]:disabled{opacity:.35}
+  .locknote{font-size:12px;color:#ffd9a8;background:#2a1d0e;border:1px solid #5c4014;
+    border-radius:10px;padding:7px 10px;margin-top:8px}
+
+  .stat{display:flex;gap:8px;margin-top:12px}
+  .stat .s{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:9px 10px;text-align:center}
+  .stat .s b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+  .stat .s span{font-size:11px;color:var(--tx2)}
+  .stat .s.bad b{color:var(--bad)} .stat .s.warm b{color:var(--acc)}
+
+  #log{max-height:160px;overflow:auto;font-size:13px}
+  #log .li{display:flex;gap:8px;padding:6px 2px;border-bottom:1px dashed #202a37}
+  #log .li .t{color:var(--tx2);font-variant-numeric:tabular-nums;white-space:nowrap}
+  #log .li.c2{color:var(--bad)} #log .li.c1{color:var(--acc)} #log .li.c3{color:var(--blue)} #log .li.c0{color:var(--tx2)}
+  #log .empty{color:var(--tx2);padding:6px 2px}
+
+  details{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:10px 14px;margin-top:12px}
+  details summary{cursor:pointer;font-weight:600;font-size:14.5px}
+  details .body{font-size:13.5px;color:#c6d3e2;margin-top:8px}
+  details .body h4{margin:12px 0 4px;color:var(--tx);font-size:13.5px}
+  details .body ul{margin:4px 0;padding-left:20px} details .body li{margin:3px 0}
+  .foot{margin-top:14px;font-size:11.5px;color:var(--tx2);text-align:center;line-height:1.5}
+  .cross{margin-top:10px;font-size:13px;color:#ffd9a8;background:#2a1d0e;border:1px solid #5c4014;
+    border-radius:10px;padding:8px 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg class="logo" viewBox="0 0 48 48" fill="none">
+      <rect x="4" y="12" width="40" height="27" rx="6" fill="#233246" stroke="#3d5ael" stroke-width="2"/>
+      <circle cx="24" cy="25.5" r="8.5" fill="#0b0f14" stroke="#ff9440" stroke-width="2.5"/>
+      <circle cx="24" cy="25.5" r="3.2" fill="#ff9440"/>
+      <circle cx="36.5" cy="17.5" r="2.4" fill="#ff4d4d"/>
+      <path d="M14 43c2-2 3-2 5 0M19 45c2-2 3-2 5 0M24 47c2-2 3-2 5 0" stroke="#ff7a1a" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>АнтиКамера PRO</h1>
+      <div class="sub">блик линзы + тепловой след · 2 детектора в одном</div>
+    </div>
+    <div class="chip" id="statusChip">ожидание</div>
+  </header>
+
+  <div class="modeseg" id="modeSeg">
+    <button data-md="glare" class="on">🔍 Блик <small>ищем камеры по вспышке</small></button>
+    <button data-md="thermal">🌡 Тепло <small>ищем электронику</small></button>
+  </div>
+
+  <!-- ================= ЭКРАН 1: БЛИК ================= -->
+  <div id="scrGlare">
+    <div class="stage" id="gStage">
+      <canvas class="src" id="gDemo" width="320" height="240" style="display:none"></canvas>
+      <video id="gVideo" playsinline muted autoplay></video>
+      <canvas class="ov" id="gOverlay"></canvas>
+      <div class="banner" id="gBanner"></div>
+      <div class="torchind" id="gTorchind"></div>
+      <div class="hint" id="gHint">Включится камера и вспышка. Медленно ведите телефон:
+        устойчивая яркая точка, мигающая в такт вспышке = возможная камера.</div>
+    </div>
+    <div class="row">
+      <button class="primary" id="btnGStart">Сканировать</button>
+      <button id="btnGDemo">Демо</button>
+      <button class="stop" id="btnGStop" disabled>Стоп</button>
+    </div>
+    <div class="card">
+      <h3>Настройки блика</h3>
+      <div class="seg" id="gSegMode">
+        <button data-m="blink" class="on">Мерцание вспышки</button>
+        <button data-m="cont">Непрерывный</button>
+      </div>
+      <div class="slider">
+        <span class="lbl">Порог</span>
+        <input type="range" id="gThresh" min="195" max="253" value="233">
+        <span class="val" id="gThreshVal">233</span>
+      </div>
+      <label class="ck"><input type="checkbox" id="gShowCand" checked>
+        Показывать неподтверждённые блики (оранжевые)</label>
+    </div>
+  </div>
+
+  <!-- ================= ЭКРАН 2: ТЕПЛО ================= -->
+  <div id="scrThermal" style="display:none">
+    <div class="stage" id="tStage">
+      <canvas class="src" id="tDemo" width="320" height="240"></canvas>
+      <video id="tVideo" playsinline muted loop style="display:none"></video>
+      <canvas class="ov" id="tOverlay"></canvas>
+      <div class="banner" id="tBanner"></div>
+      <div class="hint" id="tHint">Тепловизор видит тепло работающей электроники.
+        «Демо» покажет принцип; «Тепловое видео» — анализ записи с вашего тепловизора.</div>
+    </div>
+    <div class="row">
+      <button class="primary" id="btnTDemo">Демо</button>
+      <button id="btnTVideo">Тепловое видео</button>
+      <button class="stop" id="btnTStop" disabled>Стоп</button>
+      <input type="file" id="tFile" accept="video/*">
+    </div>
+    <div class="card">
+      <h3>Настройки тепла</h3>
+      <div class="locknote" id="lockNote">🔒 Тонкая настройка (время подтверждения, макс. размер) — в PRO-версии. Код — в разделе «PRO».</div>
+      <div class="slider">
+        <span class="lbl">Δ порог</span>
+        <input type="range" id="tDth" min="10" max="60" value="22">
+        <span class="val" id="tDthVal">22 ур.</span>
+      </div>
+      <div class="slider">
+        <span class="lbl">Подтверждение</span>
+        <input type="range" id="tPersist" min="5" max="60" value="15">
+        <span class="val" id="tPersistVal">15 c</span>
+      </div>
+      <div class="slider">
+        <span class="lbl">Макс. размер точки</span>
+        <input type="range" id="tMaxsize" min="100" max="900" value="360">
+        <span class="val" id="tMaxsizeVal">360 px</span>
+      </div>
+      <label class="ck"><input type="checkbox" id="tShowCand" checked>
+        Показывать неподтверждённые точки (оранжевые)</label>
+    </div>
+  </div>
+
+  <!-- ================= ОБЩЕЕ ================= -->
+  <div class="stat">
+    <div class="s warm"><b id="st1">0</b><span id="st1lbl">бликов в кадре</span></div>
+    <div class="s"><b id="st2">0</b><span id="st2lbl">кандидатов</span></div>
+    <div class="s bad"><b id="st3">0</b><span id="st3lbl">подтверждено</span></div>
+  </div>
+  <div class="cross" id="crossTip" style="display:none">
+    💡 Найдено в режиме «Тепло»? Проверьте это же место в режиме «Блик» — так отличают
+    камеру (блестящая линза) от другой греющейся электроники.
+  </div>
+
+  <div class="card">
+    <h3>Журнал обнаружений (общий)</h3>
+    <div id="log"><div class="empty">— пока пусто —</div></div>
+  </div>
+
+  <div class="card">
+    <h3>Ваш отзыв — делает приложение лучше</h3>
+    <div id="fbStars" style="font-size:24px;letter-spacing:3px;line-height:1;cursor:pointer"></div>
+    <textarea id="fbText" placeholder="Что помогло? Чего не хватило? (необязательно)" rows="2"
+      style="width:100%;margin-top:8px;background:#0e141b;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:9px;font-family:inherit;font-size:14px;resize:vertical"></textarea>
+    <input id="fbContact" placeholder="Контакт для ответа (необязательно)" autocomplete="off"
+      style="width:100%;margin-top:6px;background:#0e141b;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px;font-family:inherit;font-size:14px">
+    <div class="row" style="margin-top:8px">
+      <button id="btnFb" style="flex:1">Отправить отзыв</button>
+    </div>
+    <div id="fbMsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+  </div>
+
+  <div class="card" id="installCard">
+    <h3>Установка на телефон</h3>
+    <div id="installHint" style="font-size:13.5px;color:#c6d3e2">
+      <b>Android (Chrome):</b> меню браузера (⋮) → «Установить приложение» /
+      «Добавить на главный экран».<br>
+      <b>iPhone (Safari):</b> кнопка «Поделиться» (квадрат со стрелкой) →
+      «На экран “Домой”».<br>
+      После установки приложение работает офлайн и запускается с иконки, как обычное.
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnInstall" style="display:none;flex:1">Установить приложение</button>
+    </div>
+  </div>
+
+  <div class="card" id="proCard">
+    <h3>PRO-версия</h3>
+    <div id="proStatus" style="font-size:13.5px;color:#c6d3e2"></div>
+    <div class="row" style="margin-top:10px">
+      <input id="proCode" placeholder="AKP-XXXX-XXXX-XXXX" autocomplete="off"
+        style="flex:2;min-width:170px;background:#0e141b;color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:12px 10px;font-size:15px;font-family:inherit">
+      <button class="primary" id="btnActivate" style="flex:1">Активировать</button>
+    </div>
+    <div id="proMsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+    <div style="font-size:12.5px;color:var(--tx2);margin-top:8px">
+      PRO: тонкая настройка детекторов, журнал до 80 записей, поддержка развития.
+      Код активации — <a href="landing/" style="color:var(--acc)">на странице покупки</a> (оплата USDT, сеть TRC20).
+    </div>
+    <div class="row" style="margin-top:10px">
+      <input id="txHash" placeholder="Хэш транзакции после оплаты USDT" autocomplete="off"
+        style="flex:2;min-width:170px;background:#0e141b;color:var(--tx);border:1px solid var(--line);border-radius:12px;padding:12px 10px;font-size:14px;font-family:inherit">
+      <button id="btnAutoCode" style="flex:1">Код за оплату</button>
+    </div>
+    <div id="autoMsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+  </div>
+
+  <details>
+    <summary>Инструкция: полный протокол проверки помещения</summary>
+    <div class="body">
+      <h4>Шаг 1. Подготовка</h4>
+      <ul>
+        <li>Выключите свет, задёрните шторы — чем темнее, тем лучше для режима «Блик».</li>
+        <li>Тепловой режим: подготовьте тепловизор (USB-C модуль InfiRay/Topdon/FLIR One
+          или телефон со встроенной камерой тепла) и запишите медленное видео комнаты
+          20–60 с, останавливаясь на подозрительных предметах.</li>
+      </ul>
+      <h4>Шаг 2. Режим «Блик» — ищем оптику</h4>
+      <ul>
+        <li>Ведите телефон медленно (5–10 см/с) на расстоянии 0,5–3 м.</li>
+        <li>Сканируйте: датчики дыма, «глазки», зарядки, часы, картины, зеркала, карнизы,
+          вентиляционные решётки, мягкие игрушки.</li>
+        <li>В режиме «Мерцание» настоящая линза вспыхивает строго в такт вспышке
+          (красная рамка). Проверка параллаксом: сдвиньте телефон на 10–20 см —
+          блик линзы «остаётся» на месте в комнате.</li>
+      </ul>
+      <h4>Шаг 3. Режим «Тепло» — ищем работающую электронику</h4>
+      <ul>
+        <li>Загрузите тепловое видео — приложение найдёт маленькие устойчивые тёплые точки.</li>
+        <li>Тест «на отключение»: выключите розетки/свет и повторите запись — точка,
+          погаснувшая вместе с питанием, была сетевой электроникой.</li>
+      </ul>
+      <h4>Шаг 4. Перекрёстная проверка</h4>
+      <ul>
+        <li><b>И тепло, и блик</b> в одном месте → почти наверняка скрытая камера/передатчик.</li>
+        <li><b>Только блик</b> → камера «спит» (не питается) — тоже угроза.</li>
+        <li><b>Только тепло</b> → работающая электроника без оптики (датчик, трекер, «жучок»).</li>
+      </ul>
+      <h4>Ограничения</h4>
+      <ul>
+        <li>Обычный телефон не имеет тепловизора — режим «Тепло» работает с записями
+          тепловизора; «Блик» работает на любом телефоне с камерой и вспышкой
+          (на iPhone в браузере вспышкой управлять нельзя — включается непрерывный режим;
+          в нативной версии приложения поддержка полная).</li>
+        <li>Камеры с закрытой/матовой линзой и «спящая» электроника могут не обнаруживаться.</li>
+        <li>Ложные срабатывания: глянец, хром, LED-индикаторы, тёплые предметы.
+          Приложение — помощник проверки, не сертифицированный прибор.</li>
+        <li>Используйте только для защиты собственной приватности на законных основаниях.</li>
+      </ul>
+    </div>
+  </details>
+
+  <div class="foot">
+    АнтиКамера PRO · веб-приложение (PWA) · устанавливается на Android и iPhone ·
+    вся обработка локально, видео никуда не отправляется
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+   АнтиКамера PRO — объединение двух детекторов:
+   (1) Блик: ретро-отражение объективов при вспышке (мерцание/непрерывный)
+   (2) Тепло: устойчивые маленькие тёплые точки по тепловому полю
+   Общий: журнал, статистика, сигналы, переключение режимов, PWA-установка.
+   ================================================================ */
+
+const $ = id => document.getElementById(id);
+
+/* ---------- PRO: активация кодом (тот же алгоритм, что в Flutter и генераторе) ---------- */
+const LALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function checkCode(raw) {
+  const c = String(raw).toUpperCase().replace(/[^A-Z2-9]/g, '');
+  if (!c.startsWith('AKP') || c.length !== 15) return false;
+  let s = 0;
+  for (let i = 3; i < 15; i++) {
+    const idx = LALPH.indexOf(c[i]);
+    if (idx < 0) return false;
+    s = (s * 33 + idx) % 97;
+  }
+  return s === 42;
+}
+function isPro() {
+  try { return localStorage.getItem('akp_pro') === '1'; } catch (e) { return false; }
+}
+
+/* ---------- общие сигналы ---------- */
+let _audio = null, _lastBeep = 0;
+function beep(freq) {
+  const now = performance.now();
+  if (now - _lastBeep < 900) return;
+  _lastBeep = now;
+  try {
+    if (!_audio) _audio = new (window.AudioContext || window.webkitAudioContext)();
+    const a = _audio, o = a.createOscillator(), g = a.createGain();
+    o.type = 'triangle'; o.frequency.value = freq || 1400;
+    g.gain.setValueAtTime(.001, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(.25, a.currentTime + .02);
+    g.gain.exponentialRampToValueAtTime(.001, a.currentTime + .35);
+    o.connect(g); g.connect(a.destination);
+    o.start(); o.stop(a.currentTime + .36);
+  } catch (e) {}
+}
+function vibrate() { try { navigator.vibrate && navigator.vibrate([140, 70, 140, 70, 240]); } catch (e) {} }
+function addLog(time, text, cls) {
+  const log = $('log');
+  const emp = log.querySelector('.empty'); if (emp) emp.remove();
+  const div = document.createElement('div');
+  div.className = 'li c' + cls;
+  div.innerHTML = '<span class="t">' + time + '</span><span>' + text + '</span>';
+  log.prepend(div);
+  const LIM = isPro() ? 80 : 10;   // PRO: полный журнал, бесплатная версия — 10 записей
+  while (log.children.length > LIM) log.lastChild.remove();
+}
+function now2() { return new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+
+/* ---- обновление статистики и чипа (вызывают модули) ---- */
+function setStats(a, b, c, chipMode, extra) {
+  $('st1').textContent = a; $('st2').textContent = b; $('st3').textContent = c;
+  $('statusChip').className = 'chip' + (chipMode === 'alert' ? ' alert' : chipMode === 'run' ? ' run' : '');
+  $('statusChip').textContent = extra;
+}
+
+/* ================================================================
+   МОДУЛЬ 1: БЛИК (Glare)
+   ================================================================ */
+const G = (function () {
+  const PROC_W = 192, PROC_H = 144;
+  const video = $('gVideo'), overlay = $('gOverlay'), stage = $('gStage');
+  const demoCanvas = $('gDemo'), dctx = demoCanvas.getContext('2d');
+  const octx = overlay.getContext('2d');
+  const proc = document.createElement('canvas');
+  proc.width = PROC_W; proc.height = PROC_H;
+  const pctx = proc.getContext('2d', { willReadFrequently: true });
+
+  const S = { running: false, demo: false, mode: 'blink', torch: false, torchOK: false,
+    graceUntil: 0, threshold: 233, showCand: true, blinkTimer: null, lastProc: 0, nextId: 1 };
+  let stream = null, track = null;
+  const tracker = new Map();
+
+  /* ---- PURE ALGO (протестирован автотестами) ---- */
+  const mask = new Uint8Array(PROC_W * PROC_H);
+  const visited = new Uint8Array(PROC_W * PROC_H);
+  const stack = new Int32Array(PROC_W * PROC_H);
+  function detectBlobs(img) {
+    const d = img.data, W = PROC_W, H = PROC_H, th = S.threshold;
+    mask.fill(0);
+    for (let i = 0, p = 0; i < W * H; i++, p += 4) {
+      if (d[p] >= th || d[p + 1] >= th || d[p + 2] >= th) mask[i] = 1;
+    }
+    visited.fill(0);
+    const blobs = [], maxA = W * H * 0.02;
+    for (let i = 0; i < W * H; i++) {
+      if (!mask[i] || visited[i]) continue;
+      let sp = 0; stack[sp++] = i; visited[i] = 1;
+      let minX = W, maxX = 0, minY = H, maxY = 0, area = 0, sx = 0, sy = 0, sb = 0;
+      while (sp > 0) {
+        const j = stack[--sp], x = j % W, y = (j / W) | 0;
+        area++; sx += x; sy += y; sb += Math.max(d[j * 4], d[j * 4 + 1], d[j * 4 + 2]);
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x > 0 && mask[j - 1] && !visited[j - 1]) { visited[j - 1] = 1; stack[sp++] = j - 1; }
+        if (x < W - 1 && mask[j + 1] && !visited[j + 1]) { visited[j + 1] = 1; stack[sp++] = j + 1; }
+        if (y > 0 && mask[j - W] && !visited[j - W]) { visited[j - W] = 1; stack[sp++] = j - W; }
+        if (y < H - 1 && mask[j + W] && !visited[j + W]) { visited[j + W] = 1; stack[sp++] = j + W; }
+      }
+      if (area < 2 || area > maxA) continue;
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      const fill = area / (bw * bh), asp = bw / bh;
+      if (fill < 0.45 || asp < 0.3 || asp > 3.4) continue;
+      blobs.push({ cx: sx / area, cy: sy / area, w: bw, h: bh, mean: sb / area / 3, area });
+    }
+    return blobs;
+  }
+  function updateTracker(blobs, phaseOn, now) {
+    const R = 11, used = new Set();
+    for (const b of blobs) {
+      let bestId = null, bd = 1e9;
+      for (const [id, t] of tracker) {
+        const dd = (t.cx - b.cx) ** 2 + (t.cy - b.cy) ** 2;
+        if (dd < bd) { bd = dd; bestId = id; }
+      }
+      if (bestId !== null && bd <= R * R) {
+        const t = tracker.get(bestId); used.add(bestId);
+        t.cx = t.cx * .7 + b.cx * .3; t.cy = t.cy * .7 + b.cy * .3;
+        t.w = t.w * .7 + b.w * .3; t.h = t.h * .7 + b.h * .3;
+        t.mean = t.mean * .7 + b.mean * .3; t.last = now; t.miss = 0;
+        if (phaseOn) t.on++; else t.off++;
+        t.hits++;
+      } else {
+        const id = S.nextId++;
+        tracker.set(id, { cx: b.cx, cy: b.cy, w: b.w, h: b.h, mean: b.mean,
+          on: phaseOn ? 1 : 0, off: phaseOn ? 0 : 1, hits: 1, miss: 0, last: now, alerted: false });
+        used.add(id);
+      }
+    }
+    for (const [id, t] of tracker) {
+      if (!used.has(id)) { t.miss++; if (t.miss > 26 || now - t.last > 3200) tracker.delete(id); }
+      if (t.alerted && t.miss > 12) t.alerted = false;
+    }
+  }
+  function classify(t) {
+    if (S.mode === 'blink') {
+      if (t.on >= 6 && t.off <= 1 && t.on + t.off >= 7) return 2;
+      if (t.hits >= 5) return 1;
+    } else {
+      if (t.hits >= 14 && t.miss < 3) return 2;
+      if (t.hits >= 4) return 1;
+    }
+    return 0;
+  }
+  /* ---- /PURE ALGO ---- */
+
+  /* ---- демо-сцена ---- */
+  const demo = { specks: [] };
+  (function () {
+    let seed = 1234567;
+    const rnd = () => (seed = (1103515245 * seed + 12345) % 2147483648) / 2147483648;
+    for (let i = 0; i < 10; i++) demo.specks.push({ x: rnd() * 320, y: rnd() * 240, r: 1 + rnd() * 2, a: .25 + rnd() * .5 });
+    demo.lens = { x: 228, y: 96 };
+    demo.led = { x: 60, y: 170 };
+  })();
+  function drawDemo(now) {
+    const c = dctx, w = 320, h = 240;
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#0a0d12'); g.addColorStop(1, '#05070a');
+    c.fillStyle = g; c.fillRect(0, 0, w, h);
+    c.fillStyle = 'rgba(255,255,255,.03)';
+    for (let i = 0; i < 40; i++) c.fillRect((i * 61 + (now / 90) % 61) % w, (i * 37) % h, 1, 1);
+    for (const s of demo.specks) {
+      c.fillStyle = 'rgba(210,225,235,' + (s.a * (S.torch ? 1 : .35)) + ')';
+      c.beginPath(); c.arc(s.x, s.y, s.r, 0, 7); c.fill();
+    }
+    if (S.torch || S.mode === 'cont') {
+      const rg = c.createRadialGradient(demo.lens.x, demo.lens.y, 0, demo.lens.x, demo.lens.y, 16);
+      rg.addColorStop(0, 'rgba(255,255,255,1)');
+      rg.addColorStop(.18, 'rgba(255,255,255,.95)');
+      rg.addColorStop(.5, 'rgba(255,240,210,.25)');
+      rg.addColorStop(1, 'rgba(255,240,210,0)');
+      c.fillStyle = rg; c.beginPath(); c.arc(demo.lens.x, demo.lens.y, 16, 0, 7); c.fill();
+    }
+    const pulse = .7 + .3 * Math.sin(now / 260);
+    c.fillStyle = 'rgba(255,60,60,' + pulse + ')';
+    c.beginPath(); c.arc(demo.led.x, demo.led.y, 3, 0, 7); c.fill();
+    c.fillStyle = 'rgba(120,140,155,.5)';
+    c.fillRect(0, 214, w, 26); c.fillRect(0, 0, w, 14);
+    c.fillStyle = 'rgba(150,170,185,.35)';
+    c.fillRect(120, 40, 80, 70); c.fillRect(250, 130, 55, 60);
+    return demoCanvas;
+  }
+
+  /* ---- наложение ---- */
+  function resizeOverlay() {
+    const r = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    if (overlay.width !== Math.round(r.width * dpr)) {
+      overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
+    }
+  }
+  function procToScreen(x, y) {
+    const src = S.demo ? demoCanvas : video;
+    const vw = src.videoWidth || src.width || 320, vh = src.videoHeight || src.height || 240;
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const s = Math.max(sw / vw, sh / vh);
+    const dw = vw * s, dh = vh * s, ox = (sw - dw) / 2, oy = (sh - dh) / 2;
+    return [ox + (x / PROC_W) * dw, oy + (y / PROC_H) * dh, dw / PROC_W];
+  }
+  function drawOverlay(now) {
+    resizeOverlay();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, overlay.width / dpr, overlay.height / dpr);
+    let nB = 0, nC = 0, nF = 0;
+    for (const t of tracker.values()) {
+      const cls = classify(t);
+      if (cls === 2) nF++; else if (cls === 1) nC++;
+      if (cls === 0 && !S.showCand) continue;
+      if (cls === 1 && !S.showCand) continue;
+      nB++;
+      const [sx, sy, k] = procToScreen(t.cx, t.cy);
+      const w = Math.max(26, t.w * k), h = Math.max(26, t.h * k);
+      const col = cls === 2 ? 'rgba(255,77,77,' : cls === 1 ? 'rgba(255,176,32,' : 'rgba(140,160,180,';
+      octx.strokeStyle = col + (cls === 2 ? (now % 700 < 350 ? '.95)' : '.4)') : '.85)');
+      octx.lineWidth = cls === 2 ? 3 : 2;
+      octx.setLineDash(cls === 0 ? [4, 4] : []);
+      octx.strokeRect(sx - w / 2 - 4, sy - h / 2 - 4, w + 8, h + 8);
+      octx.setLineDash([]);
+      const label = cls === 2 ? 'КАМЕРА?' : cls === 1 ? 'блик' : '?';
+      octx.font = '700 12px system-ui';
+      const tw = octx.measureText(label).width + 10;
+      octx.fillStyle = cls === 2 ? 'rgba(170,20,20,.85)' : 'rgba(20,28,40,.85)';
+      octx.fillRect(sx - tw / 2, sy - h / 2 - 26, tw, 17);
+      octx.fillStyle = '#fff';
+      octx.fillText(label, sx - tw / 2 + 5, sy - h / 2 - 14);
+      if (cls === 2 && !t.alerted) alertFound(t);
+    }
+    setStats(nB, nC, nF, S.running ? (nF ? 'alert' : 'run') : '',
+      S.running ? (nF ? 'НАХОДКА!' : S.demo ? 'демо · блик' : 'сканирование') : 'ожидание');
+    $('gTorchind').textContent = (S.mode === 'blink' && S.running) ? (S.torch ? '⚡ ВСПЫШКА ВКЛ' : '· выкл') : '';
+  }
+  function alertFound(t) {
+    t.alerted = true; vibrate(); beep(1560);
+    addLog(now2(), 'БЛИК: устойчивый отблеск в такт вспышке — проверьте область! (яркость ~' + Math.round(t.mean) + ')', 2);
+    $('crossTip').style.display = '';
+  }
+
+  /* ---- вспышка ---- */
+  async function setTorch(on) {
+    if (S.demo) { S.torch = on; return; }
+    if (!track) return;
+    try { await track.applyConstraints({ advanced: [{ torch: on }] }); S.torch = on; }
+    catch (e) { S.torchOK = false; banner('Не удалось управлять вспышкой: ' + e.message); }
+  }
+  function startBlink() {
+    stopBlink();
+    S.torch = true; setTorch(true);
+    S.blinkTimer = setInterval(async () => {
+      await setTorch(!S.torch);
+      S.graceUntil = performance.now() + 260;
+    }, 850);
+  }
+  function stopBlink() { if (S.blinkTimer) { clearInterval(S.blinkTimer); S.blinkTimer = null; } }
+  function banner(text) {
+    const b = $('gBanner');
+    if (!text) { b.className = 'banner'; return; }
+    b.textContent = text; b.className = 'banner show';
+  }
+
+  /* ---- цикл ---- */
+  function loop(ts) {
+    if (!S.running) return;
+    requestAnimationFrame(loop);
+    if (ts - S.lastProc < 90) return;
+    S.lastProc = ts;
+    if (S.mode === 'blink' && ts < S.graceUntil) return;
+    const src = S.demo ? drawDemo(ts) : (video.readyState >= 2 ? video : null);
+    if (!src) return;
+    pctx.drawImage(src, 0, 0, PROC_W, PROC_H);
+    const img = pctx.getImageData(0, 0, PROC_W, PROC_H);
+    const blobs = detectBlobs(img);
+    const phaseOn = (S.mode === 'cont') || S.torch;
+    updateTracker(blobs, phaseOn, performance.now());
+    drawOverlay(performance.now());
+  }
+
+  /* ---- управление ---- */
+  async function start(camera) {
+    stopAll(); App.onModuleStart('glare');
+    if (camera) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false
+        });
+        video.srcObject = stream; await video.play();
+        track = stream.getVideoTracks()[0];
+        const caps = track.getCapabilities ? track.getCapabilities() : {};
+        S.torchOK = !!caps.torch; S.demo = false;
+        demoCanvas.style.display = 'none'; video.style.display = '';
+        if (!S.torchOK) {
+          banner('Браузер не позволяет управлять вспышкой (обычно iOS). Включён непрерывный режим — включите фонарик вручную.');
+          S.mode = 'cont'; syncModeUI();
+        }
+      } catch (e) {
+        banner('Нет доступа к камере: ' + e.message + (String(e.name) === 'NotAllowedError' ? ' — разрешите камеру в настройках браузера.' : ''));
+        addLog(now2(), 'БЛИК: ошибка доступа к камере: ' + e.message, 0);
+        return;
+      }
+    } else {
+      S.demo = true; S.torchOK = true;
+      demoCanvas.style.display = ''; video.style.display = 'none';
+      banner('ДЕМО (блик): «линза» вспыхивает в такт вспышке — подтвердится красным; «светодиод» горит всегда — останется кандидатом.');
+    }
+    S.running = true;
+    $('gHint').style.display = 'none';
+    $('btnGStart').disabled = $('btnGDemo').disabled = true;
+    $('btnGStop').disabled = false;
+    if (S.mode === 'blink') startBlink(); else setTorch(true);
+    requestAnimationFrame(loop);
+    addLog(now2(), 'БЛИК: запуск (' + (S.demo ? 'демо' : 'камера') + ', ' + S.mode + ')', 0);
+  }
+  function stopAll() {
+    S.running = false; stopBlink();
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    track = null; video.srcObject = null;
+    S.demo = false; S.torch = false;
+    tracker.clear(); banner(null);
+    $('btnGStart').disabled = $('btnGDemo').disabled = false;
+    $('btnGStop').disabled = true;
+    $('gHint').style.display = '';
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    demoCanvas.style.display = 'none'; video.style.display = '';
+    setStats(0, 0, 0, '', 'ожидание');
+  }
+  function syncModeUI() {
+    document.querySelectorAll('#gSegMode button').forEach(b => b.classList.toggle('on', b.dataset.m === S.mode));
+  }
+
+  $('btnGStart').onclick = () => start(true);
+  $('btnGDemo').onclick = () => start(false);
+  $('btnGStop').onclick = stopAll;
+  document.querySelectorAll('#gSegMode button').forEach(b => b.onclick = () => {
+    S.mode = b.dataset.m; syncModeUI();
+    if (S.running) { tracker.clear(); if (S.mode === 'blink') startBlink(); else { stopBlink(); setTorch(true); } }
+  });
+  $('gThresh').oninput = e => { S.threshold = +e.target.value; $('gThreshVal').textContent = e.target.value; };
+  $('gShowCand').onchange = e => S.showCand = e.target.checked;
+  window.addEventListener('resize', resizeOverlay);
+  resizeOverlay();
+
+  return { stopAll };
+})();
+
+/* ================================================================
+   МОДУЛЬ 2: ТЕПЛО (Thermal)
+   ================================================================ */
+const T = (function () {
+  const TW = 192, TH = 144;
+  const video = $('tVideo'), overlay = $('tOverlay'), stage = $('tStage');
+  const demoCanvas = $('tDemo'), dctx = demoCanvas.getContext('2d');
+  const octx = overlay.getContext('2d');
+  const proc = document.createElement('canvas');
+  proc.width = TW; proc.height = TH;
+  const pctx = proc.getContext('2d', { willReadFrequently: true });
+
+  const S = { running: false, demo: false, lastT: 0, lastProc: 0, nextId: 1,
+    dth: 22, dthUnit: 'ур.', persistMs: 15000, maxSmall: 360, showCand: true };
+  const trk = new Map();
+  const cfg = () => ({ movePx: 14, maxSmall: S.maxSmall, persistMs: S.persistMs, coolK: 0.75, _id: S.nextId });
+
+  /* ---- PURE ALGO (протестирован автотестами) ---- */
+  const _mask = new Uint8Array(TW * TH);
+  const _vis = new Uint8Array(TW * TH);
+  const _stack = new Int32Array(TW * TH);
+  function detectWarm(deltas, dTh, minArea, maxSmall, maxArea) {
+    const N = TW * TH;
+    _mask.fill(0); _vis.fill(0);
+    for (let i = 0; i < N; i++) if (deltas[i] >= dTh) _mask[i] = 1;
+    const out = [];
+    for (let i = 0; i < N; i++) {
+      if (!_mask[i] || _vis[i]) continue;
+      let sp = 0; _stack[sp++] = i; _vis[i] = 1;
+      let minX = TW, maxX = 0, minY = TH, maxY = 0, area = 0, sx = 0, sy = 0, sd = 0;
+      while (sp > 0) {
+        const j = _stack[--sp], x = j % TW, y = (j / TW) | 0;
+        area++; sx += x; sy += y; sd += deltas[j];
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (x > 0 && _mask[j - 1] && !_vis[j - 1]) { _vis[j - 1] = 1; _stack[sp++] = j - 1; }
+        if (x < TW - 1 && _mask[j + 1] && !_vis[j + 1]) { _vis[j + 1] = 1; _stack[sp++] = j + 1; }
+        if (y > 0 && _mask[j - TW] && !_vis[j - TW]) { _vis[j - TW] = 1; _stack[sp++] = j - TW; }
+        if (y < TH - 1 && _mask[j + TW] && !_vis[j + TW]) { _vis[j + TW] = 1; _stack[sp++] = j + TW; }
+      }
+      if (area < minArea || area > maxArea) continue;
+      const bw = maxX - minX + 1, bh = maxY - minY + 1;
+      if (area / (bw * bh) < 0.4) continue;
+      out.push({ cx: sx / area, cy: sy / area, area, mean: sd / area, big: area > maxSmall });
+    }
+    return out;
+  }
+  function updateWarm(tr, blobs, tMs, cfg) {
+    const R = 12, used = new Set();
+    for (const b of blobs) {
+      let best = null, bd = 1e9;
+      for (const [id, t] of tr) {
+        const dd = (t.cx - b.cx) ** 2 + (t.cy - b.cy) ** 2;
+        if (dd < bd) { bd = dd; best = id; }
+      }
+      if (best !== null && bd <= R * R) {
+        const t = tr.get(best); used.add(best);
+        t.cx = t.cx * .75 + b.cx * .25; t.cy = t.cy * .75 + b.cy * .25;
+        t.area = t.area * .75 + b.area * .25;
+        t.delta = t.delta * .9 + b.mean * .1;
+        if (t.delta > t.peak) t.peak = t.delta;
+        t.last = tMs; t.miss = 0; t.hits++;
+        if (Math.hypot(t.cx - t.x0, t.cy - t.y0) > cfg.movePx) t.moved = true;
+      } else {
+        const id = cfg._id++;
+        tr.set(id, { cx: b.cx, cy: b.cy, x0: b.cx, y0: b.cy, area: b.area,
+          delta: b.mean, peak: b.mean, born: tMs, last: tMs, hits: 1, miss: 0, moved: false, alerted: false });
+        used.add(id);
+      }
+    }
+    for (const [id, t] of tr) {
+      if (!used.has(id)) { t.miss++; if (t.miss > 30 || tMs - t.last > 2500) tr.delete(id); }
+    }
+  }
+  function classifyWarm(t, tMs, cfg) {
+    if (t.moved) return 0;
+    if (t.area > cfg.maxSmall) return 3;
+    if (t.peak > 1e-6 && t.delta < t.peak * cfg.coolK) return 0;
+    if (tMs - t.born >= cfg.persistMs && t.miss < 4 && t.hits >= 8) return 2;
+    if (t.hits >= 4) return 1;
+    return 0;
+  }
+  /* ---- /PURE ALGO ---- */
+
+  /* ---- палитра ---- */
+  function pal(v) {
+    v = Math.max(0, Math.min(1, v));
+    const st = [[0, 8, 12, 20], [.15, 40, 10, 90], [.35, 130, 20, 80],
+      [.55, 220, 60, 10], [.78, 250, 160, 20], [1, 255, 250, 230]];
+    for (let i = 1; i < st.length; i++) {
+      if (v <= st[i][0]) {
+        const a = st[i - 1], b = st[i], f = (v - a[0]) / (b[0] - a[0]);
+        return [a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f];
+      }
+    }
+    return [255, 250, 230];
+  }
+
+  /* ---- демо-сцена ---- */
+  const D = { deltas: new Float32Array(TW * TH), img: dctx.createImageData(320, 240) };
+  let _seed = 987654;
+  const rnd = () => (_seed = (1103515245 * _seed + 12345) % 2147483648) / 2147483648;
+  function addBlob(x, y, r, amp) {
+    const x0 = Math.max(0, Math.round(x - r - 2)), x1 = Math.min(TW - 1, Math.round(x + r + 2));
+    const y0 = Math.max(0, Math.round(y - r - 2)), y1 = Math.min(TH - 1, Math.round(y + r + 2));
+    for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+      const dd = (i - x) ** 2 + (j - y) ** 2;
+      D.deltas[j * TW + i] += amp * Math.exp(-dd / (r * r * .55));
+    }
+  }
+  function demoField(tSec) {
+    D.deltas.fill(0);
+    const n = rnd() * 0.14 - 0.07;
+    for (let i = 0; i < TW * TH; i++) D.deltas[i] = n * Math.sin(i * 12.9898 + tSec);
+    for (let j = 30; j < 108; j++) for (let i = 150; i < 180; i++)
+      D.deltas[j * TW + i] += 18 + rnd() * 1.5;
+    addBlob(30, 26, 2.5, 6.5);
+    addBlob(128, 60, 2.4, 3.4 + 0.06 * Math.sin(tSec * 1.7));
+    const pxi = Math.round(15 + 80 * (0.5 + 0.5 * Math.sin(tSec / 3.2)));
+    for (let j = 48; j < 112; j++) for (let i = -15; i <= 15; i++) {
+      const ii = pxi + i; if (ii < 0 || ii >= TW) continue;
+      D.deltas[j * TW + ii] += 12 * (1 - Math.abs(i) / 16);
+    }
+    addBlob(pxi + 17, 70, 2.2, 9);
+    addBlob(160, 122, 3, 49 * Math.exp(-tSec / 45));
+    return D.deltas;
+  }
+  function drawDemo(tSec) {
+    const img = D.img, W = 320, H = 240, kx = TW / W, ky = TH / H;
+    for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+      const d = D.deltas[((j * ky) | 0) * TW + ((i * kx) | 0)];
+      const c = pal((d + 1) / 21);
+      const p = (j * W + i) * 4;
+      img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
+    }
+    dctx.putImageData(img, 0, 0);
+  }
+
+  /* ---- видео → поле ---- */
+  function fieldFromVideo() {
+    pctx.drawImage(video, 0, 0, TW, TH);
+    const d = pctx.getImageData(0, 0, TW, TH).data;
+    const hist = new Uint32Array(256);
+    for (let i = 0; i < TW * TH; i++) hist[d[i * 4]]++;
+    let acc = 0, amb = 0;
+    for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= TW * TH * 0.2) { amb = v; break; } }
+    const f = new Float32Array(TW * TH);
+    for (let i = 0; i < TW * TH; i++) f[i] = d[i * 4] - amb;
+    return f;
+  }
+
+  /* ---- наложение ---- */
+  function resizeOverlay() {
+    const r = stage.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    if (overlay.width !== Math.round(r.width * dpr)) {
+      overlay.width = Math.round(r.width * dpr); overlay.height = Math.round(r.height * dpr);
+    }
+  }
+  function procToScreen(x, y) {
+    const src = S.demo ? demoCanvas : video;
+    const vw = src.videoWidth || src.width || 320, vh = src.videoHeight || src.height || 240;
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const s = Math.max(sw / vw, sh / vh);
+    const dw = vw * s, dh = vh * s, ox = (sw - dw) / 2, oy = (sh - dh) / 2;
+    return [ox + (x / TW) * dw, oy + (y / TH) * dh, dw / TW];
+  }
+  function drawOverlay() {
+    resizeOverlay();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, overlay.width / dpr, overlay.height / dpr);
+    let nW = 0, nC = 0, nF = 0;
+    const tMs = S.demo ? S.lastT : video.currentTime * 1000;
+    for (const t of trk.values()) {
+      const cls = classifyWarm(t, tMs, cfg());
+      if (cls === 2) nF++; else if (cls === 1) nC++; else if (cls === 3) nW++;
+      if (cls === 0 && !S.showCand) continue;
+      if (cls === 1 && !S.showCand) continue;
+      const [sx, sy, k] = procToScreen(t.cx, t.cy);
+      const w = Math.max(26, Math.sqrt(t.area) * k);
+      const col = cls === 2 ? 'rgba(255,77,77,' : cls === 1 ? 'rgba(255,122,26,'
+        : cls === 3 ? 'rgba(77,163,255,' : 'rgba(140,160,180,';
+      octx.strokeStyle = col + '.85)';
+      octx.lineWidth = cls === 2 ? 3 : 2;
+      octx.setLineDash(cls === 0 ? [4, 4] : cls === 3 ? [8, 5] : []);
+      octx.strokeRect(sx - w / 2 - 4, sy - w / 2 - 4, w + 8, w + 8);
+      octx.setLineDash([]);
+      const dTxt = (t.peak >= 1e-6 ? (t.delta >= 10 ? Math.round(t.delta) : t.delta.toFixed(1)) : '?');
+      const label = cls === 2 ? 'ЭЛЕКТРОНИКА? Δ' + dTxt : cls === 1 ? 'тепло Δ' + dTxt
+        : cls === 3 ? 'объект среды' : '?';
+      octx.font = '700 12px system-ui';
+      const tw = octx.measureText(label).width + 10;
+      octx.fillStyle = cls === 2 ? 'rgba(170,20,20,.85)' : cls === 3 ? 'rgba(20,45,80,.85)' : 'rgba(20,28,40,.85)';
+      octx.fillRect(sx - tw / 2, sy - w / 2 - 26, tw, 17);
+      octx.fillStyle = '#fff';
+      octx.fillText(label, sx - tw / 2 + 5, sy - w / 2 - 14);
+      if (cls === 2 && !t.alerted) alertConfirm(t);
+    }
+    setStats(nW, nC, nF, S.running ? (nF ? 'alert' : 'run') : '',
+      S.running ? (nF ? 'НАХОДКА!' : S.demo ? 'демо · тепло' : 'анализ видео') : 'ожидание');
+  }
+  function alertConfirm(t) {
+    t.alerted = true; vibrate(); beep(1240);
+    addLog(now2(), 'ТЕПЛО: устойчивая тёплая точка (Δ≈' +
+      (t.delta >= 10 ? Math.round(t.delta) : t.delta.toFixed(1)) + ') ≥ ' +
+      Math.round(S.persistMs / 1000) + ' c — проверьте предмет!', 2);
+    $('crossTip').style.display = '';
+  }
+  function banner(text) {
+    const b = $('tBanner');
+    if (!text) { b.className = 'banner'; return; }
+    b.textContent = text; b.className = 'banner show';
+  }
+
+  /* ---- цикл ---- */
+  function loop(ts) {
+    if (!S.running) return;
+    requestAnimationFrame(loop);
+    let tMs, field;
+    if (S.demo) {
+      if (ts - S.lastProc < 200) return;
+      S.lastProc = ts; S.lastT += 200; tMs = S.lastT;
+      field = demoField(tMs / 1000); drawDemo(tMs / 1000);
+    } else {
+      if (ts - S.lastProc < 100) return;
+      if (video.readyState < 2 || video.paused) return;
+      S.lastProc = ts; tMs = video.currentTime * 1000;
+      if (tMs < S.lastT - 500) trk.clear();
+      S.lastT = tMs;
+      field = fieldFromVideo();
+    }
+    const c = cfg();
+    updateWarm(trk, detectWarm(field, S.dth, 3, c.maxSmall, 9000), tMs, c);
+    S.nextId = c._id;
+    drawOverlay();
+  }
+
+  /* ---- управление ---- */
+  function startDemo() {
+    stopAll(); App.onModuleStart('thermal');
+    S.demo = true; S.running = true; S.lastT = 0;
+    demoCanvas.style.display = ''; video.style.display = 'none';
+    $('tHint').style.display = 'none';
+    $('btnTDemo').disabled = $('btnTVideo').disabled = true;
+    $('btnTStop').disabled = false;
+    const el = $('tDth');
+    el.min = 10; el.max = 60; el.value = 22; S.dthUnit = '°C';
+    S.dth = 2.2; $('tDthVal').textContent = '2.2 °C';
+    banner('ДЕМО (тепло): ищем скрытую камеру в «датчике дыма» (справа, Δ≈3.4°) и зарядку (слева сверху, Δ≈6.5°). Отсекаем: телефон в руке, остывающую чашку, радиатор, человека.');
+    addLog(now2(), 'ТЕПЛО: запуск демо', 0);
+    requestAnimationFrame(loop);
+  }
+  function startVideo(file) {
+    stopAll(); App.onModuleStart('thermal');
+    video.src = URL.createObjectURL(file);
+    video.style.display = ''; demoCanvas.style.display = 'none';
+    const el = $('tDth');
+    el.min = 10; el.max = 60; el.value = 22; S.dthUnit = 'ур.'; S.dth = 22;
+    $('tDthVal').textContent = '22 ур.';
+    video.onloadeddata = () => {
+      video.play();
+      S.demo = false; S.running = true;
+      $('tHint').style.display = 'none';
+      $('btnTDemo').disabled = $('btnTVideo').disabled = true;
+      $('btnTStop').disabled = false;
+      banner('Анализ видео: ' + (file.name || '') + ' · ' + video.videoWidth + '×' + video.videoHeight +
+        '. Порог Δ и время подтверждения настраиваются под палитру вашего тепловизора.');
+      addLog(now2(), 'ТЕПЛО: загружено видео ' + file.name, 0);
+      requestAnimationFrame(loop);
+    };
+    video.onerror = () => banner('Не удалось открыть видео-файл (поддерживаются MP4/WebM).');
+  }
+  function stopAll() {
+    S.running = false; video.pause();
+    trk.clear(); banner(null);
+    $('btnTDemo').disabled = $('btnTVideo').disabled = false;
+    $('btnTStop').disabled = true;
+    $('tHint').style.display = '';
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    demoCanvas.style.display = ''; video.style.display = 'none';
+    setStats(0, 0, 0, '', 'ожидание');
+  }
+  $('btnTDemo').onclick = startDemo;
+  $('btnTVideo').onclick = () => $('tFile').click();
+  $('tFile').onchange = e => { if (e.target.files[0]) startVideo(e.target.files[0]); };
+  $('btnTStop').onclick = stopAll;
+  $('tDth').oninput = e => {
+    S.dth = S.dthUnit === '°C' ? +e.target.value / 10 : +e.target.value;
+    $('tDthVal').textContent = S.dthUnit === '°C' ? (+e.target.value / 10).toFixed(1) + ' °C' : e.target.value + ' ур.';
+  };
+  $('tPersist').oninput = e => { S.persistMs = +e.target.value * 1000; $('tPersistVal').textContent = e.target.value + ' c'; };
+  $('tMaxsize').oninput = e => { S.maxSmall = +e.target.value; $('tMaxsizeVal').textContent = e.target.value + ' px'; };
+  $('tShowCand').onchange = e => S.showCand = e.target.checked;
+  window.addEventListener('resize', resizeOverlay);
+  resizeOverlay();
+  demoCanvas.style.display = ''; video.style.display = 'none';
+
+  return { stopAll };
+})();
+
+/* ================================================================
+   ПЕРЕКЛЮЧЕНИЕ РЕЖИМОВ И PWA
+   ================================================================ */
+const App = (function () {
+  let mode = 'glare';
+  function onModuleStart(which) {
+    // при старте одного модуля останавливаем другой
+    if (which === 'glare') T.stopAll(); else G.stopAll();
+  }
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m;
+    // останавливаем активный модуль при переключении
+    G.stopAll(); T.stopAll();
+    $('scrGlare').style.display = m === 'glare' ? '' : 'none';
+    $('scrThermal').style.display = m === 'thermal' ? '' : 'none';
+    document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.md === m));
+    $('st1lbl').textContent = m === 'glare' ? 'бликов в кадре' : 'объектов среды';
+    $('crossTip').style.display = m === 'thermal' ? '' : 'none';
+    if (m === 'thermal') $('crossTip').textContent =
+      '💡 Режим «Тепло» требует тепловизора (USB-C модуль или телефон с тепловой камерой) — загружайте видео. Найденное тепло проверяйте режимом «Блик».';
+  }
+  document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => setMode(b.dataset.md));
+
+  /* ---- PWA: установка ---- */
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $('btnInstall').style.display = '';
+    $('installHint').innerHTML = '<b>Android:</b> нажмите кнопку — приложение установится с иконки на рабочем столе.<br><b>iPhone:</b> Safari → «Поделиться» → «На экран “Домой”».';
+  });
+  window.addEventListener('appinstalled', () => {
+    $('btnInstall').style.display = 'none';
+    $('installHint').textContent = 'Приложение установлено — ищите иконку «АнтиКамера PRO» на рабочем столе.';
+    addLog(now2(), 'Приложение установлено на устройство', 3);
+  });
+  $('btnInstall').onclick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const r = await deferredPrompt.userChoice;
+    if (r && r.outcome === 'accepted') addLog(now2(), 'Установка подтверждена пользователем', 3);
+    deferredPrompt = null;
+    $('btnInstall').style.display = 'none';
+  };
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (isIOS) {
+    $('installHint').innerHTML =
+      '<b>iPhone/iPad:</b> откройте эту страницу в <b>Safari</b> → кнопка «Поделиться» ' +
+      '(квадрат со стрелкой вверх) → прокрутите и нажмите «<b>На экран “Домой”</b>» → «Добавить». ' +
+      'Появится иконка «АнтиКамера PRO», приложение будет работать офлайн.<br>' +
+      '<span style="color:#93a3b5">Примечание: в iOS-версии через браузер вспышкой управлять нельзя — ' +
+      'режим «Блик» использует непрерывный свет; полная поддержка — в нативном приложении (App Store).</span>';
+  }
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (standalone) {
+    $('installCard').style.display = 'none';
+  }
+
+  /* ---- Service Worker (офлайн) ---- */
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+
+  /* ---- PRO: активация кодом ---- */
+  function applyPro() {
+    const pro = isPro();
+    ['tPersist', 'tMaxsize'].forEach(id => { $(id).disabled = !pro; });
+    $('lockNote').style.display = pro ? 'none' : '';
+    $('proStatus').innerHTML = pro
+      ? '<b style="color:#38d16a">PRO активирована</b> — все настройки открыты, журнал до 80 записей. Спасибо за поддержку!'
+      : 'Бесплатная версия: оба детектора работают, журнал 10 записей, тонкая настройка закрыта.';
+    $('proCode').disabled = pro;
+    $('btnActivate').disabled = pro;
+  }
+  $('btnActivate').onclick = async () => {
+    const code = $('proCode').value.trim();
+    const msg = $('proMsg');
+    if (!checkCode(code)) {
+      msg.style.color = '#ff8080';
+      msg.textContent = 'Код недействителен. Формат: AKP-XXXX-XXXX-XXXX (покупается на странице «Купить PRO»).';
+      return;
+    }
+    // серверная проверка: код должен быть реально продан (защита от самоделок)
+    let serverSays = null;
+    try {
+      const r = await fetch('/api/check?code=' + encodeURIComponent(code));
+      const j = await r.json();
+      serverSays = j.valid === true;
+    } catch (e) { /* сервер недоступен (офлайн-режим) */ }
+    if (serverSays === false) {
+      msg.style.color = '#ff8080';
+      msg.textContent = 'Код корректен по формату, но не найден в базе продаж. Если вы его купили — напишите нам (контакты на странице покупки), восстановим.';
+      return;
+    }
+    try { localStorage.setItem('akp_pro', '1'); } catch (e) {}
+    addLog(now2(), 'PRO: версия активирована кодом' + (serverSays === true ? ' (проверен сервером)' : ''), 3);
+    msg.style.color = '#38d16a';
+    msg.textContent = '✓ Код принят — PRO активирована!';
+    applyPro();
+  };
+
+  /* ---- автовыдача кода: проверяем оплату в блокчейне TRON ---- */
+  $('btnAutoCode').onclick = async () => {
+    const hash = $('txHash').value.trim();
+    const msg = $('autoMsg');
+    if (!/^([0-9a-f]{64})$/i.test(hash)) {
+      msg.style.color = '#ff8080';
+      msg.textContent = 'Введите хэш транзакции (64 символа — из истории перевода USDT).';
+      return;
+    }
+    msg.style.color = 'var(--tx2)';
+    msg.textContent = 'Проверяю транзакцию в блокчейне TRON…';
+    try {
+      const r = await fetch('/api/verify?hash=' + encodeURIComponent(hash));
+      const j = await r.json();
+      if (j.ok) {
+        msg.style.color = '#38d16a';
+        msg.textContent = '✓ Оплата подтверждена! Код: ' + j.code + ' (вставлен в поле выше — нажмите «Активировать»)';
+        $('proCode').value = j.code;
+      } else {
+        msg.style.color = '#ff8080';
+        const map = {
+          not_found: 'Транзакция не найдена. Подождите 1–2 минуты после перевода и повторите.',
+          below_price: 'Сумма перевода меньше 9.9 USDT — доплатите и вставьте хэш нового перевода.',
+          wrong_recipient: 'Перевод ушёл не на тот адрес.',
+          wrong_token: 'Переведён не USDT.',
+          already_used: 'Этот хэш уже обменян на код.',
+          rate_limited: 'Слишком много попыток — подождите час.',
+          api_busy: 'API блокчейна занят — повторите через минуту.'
+        };
+        msg.textContent = map[j.reason] || ('Не удалось подтвердить: ' + (j.reason || 'ошибка'));
+      }
+    } catch (e) {
+      msg.style.color = '#ff8080';
+      msg.textContent = 'Автовыдача работает на сервере приложения (кнопка на странице покупки). При недоступности — пришлите хэш, контакты на странице покупки.';
+    }
+  };
+
+  /* ---- отзывы: звёзды + отправка с очередью на офлайн ---- */
+  let fbRating = 0;
+  function drawStars() {
+    const box = $('fbStars');
+    box.innerHTML = '';
+    for (let i = 1; i <= 5; i++) {
+      const s = document.createElement('span');
+      s.textContent = '★';
+      s.style.color = i <= fbRating ? '#ff9440' : '#3a4a5e';
+      s.onclick = () => { fbRating = i; drawStars(); };
+      box.appendChild(s);
+    }
+  }
+  drawStars();
+  function fbQueue() {
+    try { return JSON.parse(localStorage.getItem('akp_fbq') || '[]'); } catch (e) { return []; }
+  }
+  async function sendOne(item) {
+    try {
+      const r = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      });
+      return r.ok;
+    } catch (e) { return false; }
+  }
+  (async () => {
+    const q = fbQueue();
+    if (q.length) {
+      const left = [];
+      for (const it of q) if (!await sendOne(it)) left.push(it);
+      try { localStorage.setItem('akp_fbq', JSON.stringify(left)); } catch (e) {}
+    }
+  })();
+  $('btnFb').onclick = async () => {
+    const msg = $('fbMsg');
+    if (!fbRating) {
+      msg.style.color = '#ff8080';
+      msg.textContent = 'Поставьте оценку звёздами — это главное.';
+      return;
+    }
+    const item = {
+      rating: fbRating,
+      text: $('fbText').value.slice(0, 1000),
+      contact: $('fbContact').value.slice(0, 100)
+    };
+    if (await sendOne(item)) {
+      msg.style.color = '#38d16a';
+      msg.textContent = '✓ Спасибо! Отзыв отправлен — учтём при улучшениях.';
+      $('fbText').value = ''; fbRating = 0; drawStars();
+    } else {
+      const q = fbQueue(); q.push(item);
+      try { localStorage.setItem('akp_fbq', JSON.stringify(q)); } catch (e) {}
+      msg.style.color = '#ffd9a8';
+      msg.textContent = 'Отзыв сохранён и уйдёт автоматически при следующем запуске на сервере приложения.';
+    }
+  };
+  applyPro();
+
+  setMode('glare');
+  $('crossTip').style.display = 'none';
+  return { onModuleStart };
+})();
+</script>
+</body>
+</html>

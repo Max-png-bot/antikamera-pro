@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>АнтиКамера PRO — проверьте комнату на скрытые камеры за 5 минут</title>
+<meta property="og:title" content="АнтиКамера PRO — найдите скрытую камеру телефоном за 2 минуты">
+<meta property="og:description" content="Два детектора: блик объектива по вспышке вашего телефона + тепло работающей электроники. Бесплатно, офлайн, данные остаются на телефоне.">
+<meta property="og:type" content="website">
+<style>
+  :root{--bg:#0b0f14;--card:#131a23;--card2:#1a2330;--line:#26313f;--tx:#e8eef5;--tx2:#93a3b5;--acc:#ff9440;--grn:#38d16a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+  .hero{text-align:center;padding:30px 0 10px}
+  .hero .shield{font-size:44px}
+  .hero h1{font-size:30px;line-height:1.2;margin:12px 0 10px}
+  .hero h1 em{color:var(--acc);font-style:normal}
+  .hero p{color:var(--tx2);font-size:16.5px;max-width:560px;margin:0 auto}
+  .tags{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+  .tag{font-size:12.5px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;color:var(--tx2);background:var(--card)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+  @media(max-width:620px){.grid{grid-template-columns:1fr}}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .step b{display:flex;align-items:center;gap:8px;font-size:15px}
+  .step b .n{width:24px;height:24px;flex:none;border-radius:50%;background:var(--acc);color:#241000;
+    display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+  .step p{font-size:13.5px;color:#c6d3e2;margin-top:6px}
+  .buy{background:linear-gradient(160deg,#1c2735,#131a23);border:1px solid #3a4a5e;border-radius:18px;
+    padding:22px;margin-top:26px}
+  .buy h2{font-size:21px;text-align:center}
+  .buy .price{text-align:center;margin:12px 0 4px;font-size:38px;font-weight:800;color:var(--acc)}
+  .buy .price small{font-size:15px;color:var(--tx2);font-weight:500}
+  .buy .onetime{text-align:center;color:var(--tx2);font-size:13px}
+  .wallet{margin-top:16px;background:#0e141b;border:1px dashed #3a4a5e;border-radius:12px;padding:14px}
+  .wallet .lbl{font-size:12.5px;color:var(--tx2);text-transform:uppercase;letter-spacing:.5px}
+  .wallet .addr{display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap}
+  .wallet code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;word-break:break-all;
+    color:#ffd9a8;background:#182029;padding:8px 10px;border-radius:8px;flex:1;min-width:200px}
+  .copy{border:1px solid var(--line);background:var(--card2);color:var(--tx);padding:10px 14px;
+    border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+  .copy:active{transform:translateY(1px)}
+  .paygrid{display:grid;grid-template-columns:150px 1fr;gap:16px;margin-top:14px;align-items:start}
+  @media(max-width:560px){.paygrid{grid-template-columns:1fr}.qrbox{text-align:center}}
+  .qrbox img{width:150px;height:150px;border-radius:10px;background:#fff;padding:6px}
+  .qrbox .net{font-size:12px;color:var(--tx2);text-align:center;margin-top:4px}
+  .how{counter-reset:s;margin-top:10px}
+  .how li{list-style:none;font-size:14px;color:#c6d3e2;margin:8px 0;padding-left:34px;position:relative}
+  .how li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:1px;width:22px;height:22px;
+    border-radius:50%;background:#233246;color:var(--tx);font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center}
+  .warn{margin-top:12px;font-size:12.5px;color:#ffb3b3;background:#2a1515;border:1px solid #6b2323;
+    border-radius:10px;padding:9px 11px}
+  .try{text-align:center;margin-top:22px}
+  .try a,.btn{display:inline-block;background:linear-gradient(180deg,#ffa95c,#e56500);color:#241000;
+    font-weight:800;padding:14px 26px;border-radius:14px;text-decoration:none;font-size:16px;
+    border:1px solid #8a4a00}
+  table{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}
+  th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--tx2);font-size:12.5px;text-transform:uppercase;letter-spacing:.4px}
+  td.yes{color:var(--grn)} td.pro{color:#ffd9a8;font-weight:700}
+  .faq details{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 15px;margin-top:10px}
+  .faq summary{cursor:pointer;font-weight:600;font-size:14.5px}
+  .faq .a{font-size:13.5px;color:#c6d3e2;margin-top:8px}
+  .foot{margin-top:30px;font-size:12px;color:var(--tx2);text-align:center;line-height:1.6}
+  h2.sec{font-size:20px;margin-top:30px}
+  .okmsg{display:none;margin-top:8px;font-size:13px;color:var(--grn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="shield">🛡️</div>
+    <h1>Узнайте, смотрит ли на вас <em>скрытая камера</em></h1>
+    <p>Два детектора в одном приложении: блик линзы по вспышке телефона и тепловой след работающей электроники. Без специальных приборов — прямо с вашего смартфона.</p>
+    <div class="tags">
+      <span class="tag">📱 съёмная квартира</span>
+      <span class="tag">🏨 отели и хостелы</span>
+      <span class="tag">🚿 раздевалки и ванные</span>
+      <span class="tag">💼 командировки</span>
+      <span class="tag">🔒 приватность</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="step"><b><span class="n">1</span>Блик линзы</b>
+      <p>Вспышка вашего телефона заставляет объектив скрытой камеры ярко вспыхивать. Медленно ведёте телефон — приложение ловит отблеск и подтверждает его устойчивость.</p></div>
+    <div class="step"><b><span class="n">2</span>Тепловой след</b>
+      <p>Работающая электроника греется. Загружаете видео с тепловизора (USB-C-модуль или телефон с тепловой камерой) — приложение находит маленькие устойчивые тёплые точки.</p></div>
+  </div>
+
+  <div class="buy">
+    <h2>Разблокировать PRO</h2>
+    <div class="price">9.9 <small>USDT</small></div>
+    <div class="onetime">разовая оплата · без подписок · все обновления v1.x включены</div>
+
+    <div class="wallet">
+      <div class="lbl">Кошелёк для оплаты (USDT, сеть TRC20)</div>
+      <div class="addr">
+        <code id="waddr">TBA8d1eLJhLVKGjQfeDcxvEJTmrq7Nzrc9</code>
+        <button class="copy" id="btnCopy">Копировать</button>
+      </div>
+      <span class="okmsg" id="okmsg">✓ адрес скопирован — вставьте в кошелёк и проверьте первые и последние символы</span>
+    </div>
+
+    <div class="paygrid">
+      <div class="qrbox">
+        <img alt="QR: кошелёк USDT TRC20" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQgAAAEIAQAAAACLjVdSAAABnElEQVR4nO2ZO5LDMAxDHzK5/5WxBT+2q1TL5aziwqMwKCAOBYKyzIfn9QnwRfxjBHYvjDOSK8DewnQG8YbYu0CWBYrEVHQL07l8IDAo0iCDcEXXMB3MRz0CC+o9yWML4pEPIyw9EVuYDubj0XMdp6WjW5jO5aMLQi5RlTu6helYPm7VoW6zV3QL0xmEjFJD8yeAuGJbmI4hrLRiAivlVOFAjvMfL5AluNpKuRGHF1nEdAARwmnCg8myosGIPEJbmI7lA8jdZ0rKqsdqC9O5fNTO06fTFvXA8xJ+LLpMSWiUjGOeWcN0dJ6LBpvyAXVqhNcwndTT0o3S1PgLztOPNykTeWZUAz9kk9nCdBBhkFAZD3U2ztOPF4QXs2PhHl2yTFYx/XVE3n+Eolo3H5YnZw3TUT8GOb64pv5uvFuYjtVHDi5Ow5E10onawnSwv0CcmGi36U0jeJr/uN2vx52Hc+yH/OiwhemongKXaJiaeNGR9dFPSKr6G8yp8xzxlpEsY2GnpG5hOjq/UAP+4xp1kMcWxH3nf8nji9iJ+AG7yroLNFK6kAAAAABJRU5ErkJggg==">
+        <div class="net">наведите камеру кошелька</div>
+      </div>
+      <div>
+        <ol class="how">
+          <li>Переведите <b>9.9 USDT</b> на кошелёк слева (QR или копирование). Сеть — <b>только TRC20</b>.</li>
+          <li>Скопируйте <b>хэш транзакции</b> (длинная строка из истории перевода) и вставьте его в форму «Автоматическая выдача кода» ниже — <b>код появится сразу</b>, без переписки и ожидания.</li>
+          <li>Откройте приложение → раздел <b>PRO</b> → введите код (или вставьте хэш прямо там — код придёт автоматически). Готово!</li>
+        </ol>
+        <div class="wallet" style="margin-top:12px">
+          <div class="lbl">Автоматическая выдача кода</div>
+          <div class="addr" style="margin-top:6px">
+            <input id="txHash" placeholder="Хэш транзакции (64 символа)" autocomplete="off"
+              style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
+            <button class="copy" id="btnVerify">Получить код</button>
+          </div>
+          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+        </div>
+        <div class="warn">⚠️ Перепроверьте адрес вручную после вставки (первые «TBA8d1e…» и последние «…q7Nzrc9»). Перевод не на тот адрес или не в сети TRC20 невозможно отменить. Перед крупной покупкой можно сделать тестовый перевод.</div>
+      </div>
+    </div>
+
+    <h2 class="sec" style="margin-top:24px">Что даёт PRO</h2>
+    <table>
+      <tr><th>Функция</th><th>Бесплатно</th><th>PRO</th></tr>
+      <tr><td>Детектор блика (камера + вспышка)</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Анализ теплового видео</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Тонкая настройка (пороги, время подтверждения, размер цели)</td><td>—</td><td class="pro">✓</td></tr>
+      <tr><td>Журнал проверок</td><td>10 записей</td><td class="pro">500 записей</td></tr>
+      <tr><td>Экспорт отчёта о проверке</td><td>—</td><td class="pro">✓</td></tr>
+      <tr><td>Приоритетная поддержка</td><td>—</td><td class="pro">✓</td></tr>
+    </table>
+
+    <div class="try">
+      <a href="../index.html">Попробовать бесплатно (демо)</a>
+      <p style="font-size:12.5px;color:var(--tx2);margin-top:8px">Базовое детектирование бесплатно навсегда — оплатите PRO, когда убедитесь, что работает.</p>
+    </div>
+  </div>
+
+  <div class="faq">
+    <h2 class="sec">Частые вопросы</h2>
+    <details><summary>Почему оплата криптовалютой?</summary>
+      <div class="a">Мгновенно, без банка и границ, низкая комиссия сети TRON (~1 $). USDT — стейблкоин, привязан к доллару: 9.9 USDT = 9.9 $.</div></details>
+    <details><summary>Я не разбираюсь в крипте. Это сложно?</summary>
+      <div class="a">Нет: установите любой кошелёк с поддержкой TRON (например, Trust Wallet или Tonkeeper с USDT), купите 10 USDT, отсканируйте QR-код с этой страницы и отправьте. Дальше пришлите хэш — и получите код.</div></details>
+    <details><summary>На скольких устройствах работает один код?</summary>
+      <div class="a">Код активирует все ваши личные устройства (телефон + планшет). Массовое использование одного кода блокируется проверкой уникальности при обновлениях.</div></details>
+    <details><summary>Это законно?</summary>
+      <div class="a">Поиск камер в помещении, где вы находитесь, для защиты собственной приватности — законен в большинстве стран. Приложение не перехватывает чужие сигналы и не взламывает устройства. Доход от продаж подлежит декларированию по законам вашей страны.</div></details>
+    <details><summary>Приложение точно найдёт камеру?</summary>
+      <div class="a">Оно ловит два главных признака: блик оптики и тепло работающей электроники. Камера с матовой/закрытой линзой в «спящем» режиме может не обнаружиться — стопроцентной гарантии не даёт ни один детектор. Приложение — мощный помощник проверки, а не сертифицированный прибор.</div></details>
+  </div>
+
+  <div class="foot">
+    АнтиКамера PRO · обработка видео полностью на устройстве · данные не передаются третьим лицам<br>
+    Поддержка: antikamera.pro@gmail.com · Telegram @antikamera_support<br>
+    © 2026 · оплата USDT TRC20 · чек по запросу
+  </div>
+</div>
+<script>
+document.getElementById('btnCopy').onclick = function () {
+  var t = document.getElementById('waddr').textContent;
+  function done() {
+    var m = document.getElementById('okmsg');
+    m.style.display = 'block';
+    setTimeout(function () { m.style.display = 'none'; }, 3500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(done, function () { fallback(); });
+  } else { fallback(); }
+  function fallback() {
+    var ta = document.createElement('textarea');
+    ta.value = t; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+};
+document.getElementById('btnVerify').onclick = async function () {
+  var h = document.getElementById('txHash').value.trim();
+  var m = document.getElementById('vmsg');
+  if (!/^([0-9a-f]{64})$/i.test(h)) {
+    m.style.color = '#ff8080';
+    m.textContent = 'Введите хэш транзакции — 64 символа из истории перевода USDT.';
+    return;
+  }
+  m.style.color = '#93a3b5';
+  m.textContent = 'Проверяю транзакцию в блокчейне TRON…';
+  try {
+    var r = await fetch('/api/verify?hash=' + encodeURIComponent(h));
+    var j = await r.json();
+    if (j.ok) {
+      m.style.color = '#38d16a';
+      m.textContent = '✓ Оплата подтверждена! Ваш код: ' + j.code +
+        ' — введите его в приложении (раздел PRO → «Активировать»).';
+    } else {
+      m.style.color = '#ff8080';
+      var map = {
+        not_found: 'Транзакция не найдена. Подождите 1–2 минуты после перевода и повторите.',
+        below_price: 'Сумма меньше 9.9 USDT — доплатите и вставьте хэш нового перевода.',
+        wrong_recipient: 'Перевод ушёл не на тот адрес.',
+        wrong_token: 'Переведён не USDT.',
+        already_used: 'Этот хэш уже обменян на код.',
+        rate_limited: 'Слишком много попыток — подождите час.',
+        api_busy: 'API блокчейна занят — повторите через минуту.'
+      };
+      m.textContent = map[j.reason] || ('Не удалось подтвердить: ' + (j.reason || 'ошибка'));
+    }
+  } catch (e) {
+    m.style.color = '#ff8080';
+    m.textContent = 'Автовыдача временно недоступна — напишите на почту из подвала страницы, код вышлем вручную.';
+  }
+};
+</script>
+</body>
+</html>

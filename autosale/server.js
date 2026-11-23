@@ -1,0 +1,393 @@
+#!/usr/bin/env node
+/* ================================================================
+   АнтиКамера PRO — АВТОНОМНЫЙ СЕРВЕР ПРОДАЖ (уровень 3 автоматизации).
+   Без участия продавца: покупатель платит USDT TRC20 на кошелёк,
+   вставляет хэш транзакции → сервер проверяет платёж в блокчейне TRON
+   (TronGrid API) и мгновенно выдаёт код активации PRO.
+
+   Возможности:
+     GET  /                    — PWA-приложение (index.html)
+     GET  /landing/            — продающая страница
+     GET  /api/verify?hash=    — проверка оплаты + выдача кода (публично)
+     POST /api/feedback        — приём отзывов из приложения
+     GET  /api/stats?key=      — статистика (только с ключом админа)
+     GET  /api/feedback/list?key= — все отзывы (только с ключом админа)
+     GET  /admin?key=          — панель продавца: продажи, выручка,
+                                 остаток кодов, отзывы, приоритеты улучшений
+
+   Запуск:  PORT=8083 ADMIN_KEY=секрет node autosale/server.js
+   Экономия квот: укажите TRONGRID_KEY (бесплатный, tronscan.org → API).
+   Состояние — JSON-файлы в sales/ (переживают перезапуск).
+
+   Зависимости: НЕТ (чистый Node.js ≥ 18, встроенный fetch).
+   ================================================================ */
+'use strict';
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+/* ---------- конфигурация ---------- */
+const ROOT = path.join(__dirname, '..');        // папка antikamera-pro
+const DIR = process.env.AUTOSALE_DIR || path.join(ROOT, 'sales');
+const PORT = +(process.env.PORT || 8083);
+const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(9).toString('base64url');
+const WALLET = process.env.WALLET || 'TBA8d1eLJhLVKGjQfeDcxvEJTmrq7Nzrc9';
+const PRICE = +(process.env.PRICE || 9.9);
+const TRONGRID_KEY = process.env.TRONGRID_KEY || '';
+const USDT_TRC20 = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // контракт USDT в TRON
+
+const F = {
+  stock: path.join(DIR, 'codes_batch1.txt'),
+  sales: path.join(DIR, 'sales_log.json'),
+  redeemed: path.join(DIR, 'redemptions.json'),
+  feedback: path.join(DIR, 'feedback.json'),
+};
+fs.mkdirSync(DIR, { recursive: true });
+
+/* ---------- коды активации (единый алгоритм с приложениями) ---------- */
+const LALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function checkCode(raw) {
+  const c = String(raw).toUpperCase().replace(/[^A-Z2-9]/g, '');
+  if (!c.startsWith('AKP') || c.length !== 15) return false;
+  let s = 0;
+  for (let i = 3; i < 15; i++) {
+    const idx = LALPH.indexOf(c[i]);
+    if (idx < 0) return false;
+    s = (s * 33 + idx) % 97;
+  }
+  return s === 42;
+}
+function mintCode(rng) {
+  for (;;) {
+    let c = 'AKP';
+    for (let i = 0; i < 12; i++) c += LALPH[rng(32)];
+    if (checkCode(c)) return formatCode(c);
+  }
+}
+function formatCode(c) {
+  c = String(c).toUpperCase().replace(/[^A-Z2-9]/g, '');
+  return `${c.slice(0, 3)}-${c.slice(3, 7)}-${c.slice(7, 11)}-${c.slice(11, 15)}`;
+}
+
+/* ---------- хранилище (JSON-файлы) ---------- */
+function loadJson(file, def) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return def; }
+}
+function saveJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 1));
+}
+
+/* ---------- склад кодов ---------- */
+function takeCodeFromStock(txHash, amount) {
+  let lines = [];
+  try { lines = fs.readFileSync(F.stock, 'utf8').split('\n'); } catch (_) {}
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('| не продан')) {
+      const code = lines[i].split('|')[0].trim();
+      lines[i] = lines[i].replace('| не продан | —', `| продан | tx ${txHash} (${amount} USDT)`);
+      fs.writeFileSync(F.stock, lines.join('\n'));
+      return { code, source: 'stock' };
+    }
+  }
+  // склад пуст → чеканим новый код (необратимо действительный, оплата получена)
+  const code = mintCode(n => crypto.randomInt(n));
+  fs.appendFileSync(F.stock, `${code} | продан | tx ${txHash} (${amount} USDT, автогенерация)\n`);
+  return { code, source: 'minted' };
+}
+
+/* ---------- проверка платежа в блокчейне ---------- */
+async function fetchTransfers(fetchImpl, maxPages = 3) {
+  const fetchFn = fetchImpl || (globalThis.fetch ? globalThis.fetch.bind(globalThis) : null);
+  if (!fetchFn) throw new Error('no fetch');
+  const out = [];
+  let fingerprint = '';
+  for (let page = 0; page < maxPages; page++) {
+    const url =
+      `https://api.trongrid.io/v1/accounts/${WALLET}/transactions/trc20` +
+      `?limit=200&only_to=true&contract_type=trc20transfer` +
+      (fingerprint ? `&fingerprint=${fingerprint}` : '');
+    const headers = TRONGRID_KEY ? { 'TRON-PRO-API-KEY': TRONGRID_KEY } : {};
+    const res = await fetchFn(url, { headers });
+    if (!res.ok) {
+      const err = new Error('HTTP ' + res.status);
+      err.apiBusy = res.status === 429 || res.status >= 500;
+      throw err;
+    }
+    const j = await res.json();
+    out.push(...(j.data || []));
+    fingerprint = (j.meta && j.meta.fingerprint) || '';
+    if (!fingerprint) break;
+  }
+  return out;
+}
+
+/**
+ * Проверяет транзакцию и (если всё сошлось) выдаёт код.
+ * Возвращает {ok:true, code} или {ok:false, reason}.
+ * Причины: bad_hash, not_found, below_price, wrong_recipient,
+ *           wrong_token, already_used, api_busy.
+ */
+async function verifyPayment(hash, fetchImpl) {
+  if (!/^[0-9a-f]{64}$/i.test(String(hash || ''))) return { ok: false, reason: 'bad_hash' };
+  const h = String(hash).toLowerCase();
+  const redeemed = loadJson(F.redeemed, []);
+  if (redeemed.some(r => r.hash === h)) return { ok: false, reason: 'already_used' };
+
+  let txs;
+  try {
+    txs = await fetchTransfers(fetchImpl);
+  } catch (e) {
+    return { ok: false, reason: e.apiBusy ? 'api_busy' : 'api_error' };
+  }
+  const tx = txs.find(t => String(t.transaction_id || '').toLowerCase() === h);
+  if (!tx) return { ok: false, reason: 'not_found' };
+  if (String(tx.to || '') !== WALLET) return { ok: false, reason: 'wrong_recipient' };
+  const symbol = (tx.token_info && tx.token_info.symbol) || '';
+  const tokenAddr = String((tx.token_info && tx.token_info.address) || '');
+  if (symbol !== 'USDT' && tokenAddr !== USDT_TRC20) return { ok: false, reason: 'wrong_token' };
+  const amount = parseInt(tx.value || '0', 10) / 1e6;
+  if (!(amount >= PRICE - 0.001)) return { ok: false, reason: 'below_price', amount };
+
+  // оплата подтверждена — выдать код и записать
+  const { code, source } = takeCodeFromStock(h, amount);
+  redeemed.push({ hash: h, code, amount, from: tx.from || '', ts: Date.now() });
+  saveJson(F.redeemed, redeemed.slice(-2000));
+  const sales = loadJson(F.sales, []);
+  sales.push({ ts: Date.now(), hash: h, from: tx.from || '', amount, code, source });
+  saveJson(F.sales, sales.slice(-2000));
+  return { ok: true, code, amount };
+}
+
+/* ---------- отзывы ---------- */
+const STOP = new Set(['который','чтобы','приложение','приложения','программа',
+  'только','потому','когда','телефон','телефона','телефоне','очень','нужно',
+  'также','будто','всего','этого','этой','если','было','быть','моей','мого',
+  'есть','ещё','еще','какие','какой','мне','меня','него','него','них','мной']);
+function feedbackStats() {
+  const fb = loadJson(F.feedback, []);
+  const n = fb.length;
+  const avg = n ? fb.reduce((s, x) => s + (+x.rating || 0), 0) / n : 0;
+  const bad = fb.filter(x => +x.rating <= 3);
+  const freq = {};
+  for (const x of bad) {
+    const words = String(x.text || '').toLowerCase().split(/[^а-яёa-z]+/);
+    for (const w of words) {
+      if (w.length < 5 || STOP.has(w)) continue;
+      freq[w] = (freq[w] || 0) + 1;
+    }
+  }
+  const topIssues = Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 7)
+    .map(([word, count]) => ({ word, count }));
+  return { count: n, avg: +avg.toFixed(2), topIssues };
+}
+
+/* ---------- статика ---------- */
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8', '.png': 'image/png',
+  '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
+};
+function serveStatic(req, res, pathname) {
+  let rel = pathname;
+  if (rel === '/' || rel === '/landing' || rel === '/landing/') {
+    rel = rel === '/landing' || rel === '/landing/' ? '/landing/index.html' : '/index.html';
+  }
+  const full = path.normalize(path.join(ROOT, rel));
+  if (!full.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('forbidden'); return; }
+  fs.readFile(full, (err, data) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('not found'); return; }
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': rel === '/sw.js' ? 'no-cache' : 'public, max-age=3600',
+    });
+    res.end(data);
+  });
+}
+
+/* ---------- лимит запросов /api/verify ---------- */
+const hits = new Map();
+function rateLimited(ip) {
+  const now = Date.now();
+  const arr = (hits.get(ip) || []).filter(t => now - t < 3600e3);
+  arr.push(now);
+  hits.set(ip, arr);
+  return arr.length > 30;
+}
+
+/* ---------- серверная валидация кода (защита от самоделок) ---------- */
+function codeWasSold(code) {
+  const c = String(code || '').toUpperCase();
+  if (!checkCode(c)) return false;
+  if (loadJson(F.redeemed, []).some(r => String(r.code).toUpperCase() === c)) return true;
+  if (loadJson(F.sales, []).some(s => String(s.code).toUpperCase() === c)) return true;
+  try {
+    return fs.readFileSync(F.stock, 'utf8').split('\n')
+      .some(l => l.toUpperCase().startsWith(c) && l.includes('| продан'));
+  } catch (_) { return false; }
+}
+
+/* ---------- панель админа ---------- */
+const ADMIN_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>АнтиКамера PRO — панель продавца</title><style>
+body{background:#0b0f14;color:#e8eef5;font:15px/1.5 system-ui,sans-serif;margin:0;padding:20px}
+.w{max-width:720px;margin:0 auto}.g{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+.c{background:#131a23;border:1px solid #26313f;border-radius:12px;padding:12px;text-align:center}
+.c b{display:block;font-size:24px;color:#ff9440}.c span{font-size:11px;color:#93a3b5}
+h2{font-size:17px;margin:22px 0 8px}table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{padding:7px 8px;border-bottom:1px solid #26313f;text-align:left}
+.f{background:#131a23;border-radius:10px;padding:9px 12px;margin-top:8px;font-size:13.5px}
+.f .r{color:#ff9440}.f .d{color:#93a3b5;font-size:11.5px}
+.err{color:#ff8080;padding:20px}
+</style></head><body><div class="w"><h1>АнтиКамера PRO — панель продавца</h1>
+<div id="app">Загрузка…</div></div>
+<script>
+const KEY = new URLSearchParams(location.search).get('key') || '';
+async function go() {
+  try {
+    const st = await (await fetch('/api/stats?key=' + encodeURIComponent(KEY))).json();
+    const fb = await (await fetch('/api/feedback/list?key=' + encodeURIComponent(KEY))).json();
+    if (st.error) { document.getElementById('app').innerHTML =
+      '<div class="err">Неверный ключ администратора.</div>'; return; }
+    const fmt = t => new Date(t).toLocaleString('ru-RU');
+    const rows = (st.sales || []).slice().reverse().slice(0, 30).map(s =>
+      '<tr><td>' + fmt(s.ts) + '</td><td>' + s.amount + ' USDT</td><td><code style="font-size:11px">' +
+      s.hash.slice(0, 10) + '…</code></td><td>' + s.code + '</td></tr>').join('');
+    const fbs = (fb.list || []).slice().reverse().slice(0, 40).map(x =>
+      '<div class="f"><span class="r">' + '★'.repeat(+x.rating || 0) +
+      '</span> ' + (x.text ? String(x.text).replace(/[<>&]/g, c =>
+      ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) : '(без текста)') +
+      (x.contact ? ' — <b>' + String(x.contact).replace(/[<>&]/g, '') + '</b>' : '') +
+      '<div class="d">' + fmt(x.ts) + '</div></div>').join('');
+    const issues = (st.feedback && st.feedback.topIssues || []).map(i =>
+      '<b>' + i.word + '</b> ×' + i.count).join(' · ') || '—';
+    document.getElementById('app').innerHTML =
+      '<div class="g"><div class="c"><b>' + (st.revenue || 0).toFixed(1) +
+      '</b><span>USDT выручка</span></div><div class="c"><b>' + (st.salesCount || 0) +
+      '</b><span>продаж</span></div><div class="c"><b>' + (st.codesLeft | 0) +
+      '</b><span>кодов на складе</span></div><div class="c"><b>' +
+      (st.feedback ? st.feedback.avg : '—') + '</b><span>средняя оценка</span></div></div>' +
+      '<h2>Приоритеты улучшений (из негативных отзывов)</h2><div class="f">' + issues +
+      '</div><h2>Последние продажи</h2><table><tr><th>Дата</th><th>Сумма</th><th>tx</th><th>Код</th></tr>' +
+      (rows || '<tr><td colspan=4>пока нет продаж</td></tr>') + '</table>' +
+      '<h2>Отзывы (' + (st.feedback ? st.feedback.count : 0) + ')</h2>' +
+      (fbs || '<div class="f">пока пусто</div>');
+  } catch (e) {
+    document.getElementById('app').innerHTML = '<div class="err">Ошибка загрузки: ' + e.message + '</div>';
+  }
+}
+go();
+</script></body></html>`;
+
+/* ---------- HTTP-сервер ---------- */
+function json(res, code, obj) {
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(JSON.stringify(obj));
+}
+
+function start() {
+  const server = http.createServer(async (req, res) => {
+    const u = new URL(req.url, 'http://x');
+    const ip = req.socket.remoteAddress || '?';
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      return res.end();
+    }
+
+    /* API */
+    if (u.pathname === '/api/verify') {
+      if (rateLimited(ip)) return json(res, 429, { ok: false, reason: 'rate_limited' });
+      const r = await verifyPayment(u.searchParams.get('hash') || '');
+      return json(res, r.ok ? 200 : 200, r);
+    }
+
+    if (u.pathname === '/api/feedback' && req.method === 'POST') {
+      let body = '';
+      for await (const chunk of req) {
+        body += chunk;
+        if (body.length > 4096) return json(res, 413, { ok: false });
+      }
+      try {
+        const d = JSON.parse(body);
+        const fb = loadJson(F.feedback, []);
+        fb.push({
+          ts: Date.now(),
+          rating: Math.min(5, Math.max(0, +d.rating || 0)),
+          text: String(d.text || '').slice(0, 1000),
+          contact: String(d.contact || '').slice(0, 100),
+        });
+        saveJson(F.feedback, fb.slice(-2000));
+        return json(res, 200, { ok: true });
+      } catch (_) {
+        return json(res, 400, { ok: false });
+      }
+    }
+
+    if (u.pathname === '/api/feedback/list') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      return json(res, 200, { list: loadJson(F.feedback, []) });
+    }
+
+    if (u.pathname === '/api/check') {
+      if (rateLimited(ip)) return json(res, 429, { ok: false });
+      const c = (u.searchParams.get('code') || '').toUpperCase();
+      return json(res, 200, { valid: codeWasSold(c), code: c });
+    }
+
+    if (u.pathname === '/api/stats') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      const sales = loadJson(F.sales, []);
+      let stock = 0;
+      try {
+        stock = fs.readFileSync(F.stock, 'utf8').split('\n')
+          .filter(l => l.includes('| не продан')).length;
+      } catch (_) {}
+      return json(res, 200, {
+        salesCount: sales.length,
+        revenue: sales.reduce((s, x) => s + (+x.amount || 0), 0),
+        codesLeft: stock,
+        sales: sales.slice(-50),
+        feedback: feedbackStats(),
+        wallet: WALLET,
+        price: PRICE,
+      });
+    }
+
+    if (u.pathname === '/admin') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(ADMIN_HTML);
+    }
+
+    /* статика */
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      return serveStatic(req, res, u.pathname);
+    }
+    res.writeHead(405);
+    res.end();
+  });
+
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('=== АнтиКамера PRO: автономный сервер продаж ===');
+    console.log('Приложение:  http://localhost:' + PORT + '/');
+    console.log('Лендинг:     http://localhost:' + PORT + '/landing/');
+    console.log('Панель:      http://localhost:' + PORT + '/admin?key=' + ADMIN_KEY);
+    console.log('Кошелёк USDT TRC20: ' + WALLET + ' · цена: ' + PRICE + ' USDT');
+    console.log('Состояние: ' + DIR);
+  });
+  return server;
+}
+
+if (require.main === module) start();
+module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, F, ADMIN_KEY };

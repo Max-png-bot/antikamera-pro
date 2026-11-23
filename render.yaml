@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: antikamera-pro
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node autosale/server.js
+    envVars:
+      - key: ADMIN_KEY
+        generateValue: true
+      - key: PRICE
+        value: "9.9"
+      - key: TRONGRID_KEY
+        sync: false
+    healthCheckPath: /manifest.json
