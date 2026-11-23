@@ -298,7 +298,54 @@ async function redditStatsText() {
   }
 }
 
-/* ---------- ежедневный дайджест владельцу (09:00 UTC) ---------- */
+/* ---------- ночное наблюдение за Reddit-постом (каждые 30 мин) ----------
+   Новые комментарии → мгновенное сообщение владельцу в Telegram
+   (первые 200 символов, автор), чтобы утром можно было ответить. */
+async function redditWatchTick() {
+  const stateF = path.join(DIR, 'reddit_state.json');
+  const st = loadJson(stateF, {});
+  const conf = loadJson(path.join(__dirname, 'reddit_post.json'), {}) || {};
+  const url = conf.url || process.env.REDDIT_POST_URL;
+  if (!url) return;
+  try {
+    const r = await fetch(url.replace(/\/$/, '') + '.json',
+      { headers: { 'User-Agent': 'antikamera-monitor/1.0' } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const post = (j[0] && j[0].data && j[0].data.children
+      && j[0].data.children[0] && j[0].data.children[0].data) || {};
+    const seen = new Set(st.seenIds || []);
+    const fresh = [];
+    const walk = (cs) => {
+      for (const c of cs || []) {
+        const d = c && c.data;
+        if (!d) continue;
+        if (d.author && d.author !== 'stablefi' && d.body && d.id && !seen.has(d.id)) {
+          fresh.push({ id: d.id, author: d.author, body: String(d.body) });
+        }
+        if (d.replies && d.replies.data && d.replies.data.children) walk(d.replies.data.children);
+      }
+    };
+    walk((j[1] && j[1].data && j[1].data.children) || []);
+    for (const f of fresh) seen.add(f.id);
+    st.seenIds = [...seen].slice(-300);
+    st.num_comments = post.num_comments;
+    st.score = post.score;
+    st.ts = Date.now();
+    saveJson(stateF, st);
+    if (fresh.length) {
+      let txt = `💬 Reddit-пост: ${fresh.length} новых комментариев (апвоутов: ${post.score})\n`;
+      for (const f of fresh.slice(0, 8)) {
+        txt += `\n— u/${f.author}: ${f.body.slice(0, 200)}${f.body.length > 200 ? '…' : ''}\n`;
+      }
+      if (txt.length > 3500) txt = txt.slice(0, 3500) + '\n…';
+      notify('🔔 АнтиКамера PRO: ' + txt);
+    }
+  } catch (_) { /* наблюдение не должно ронять сервер */ }
+}
+
+/* ---------- ежеме........DIGEST_MARKER_54321 ---------- */
+
 async function dailyDigestText() {
   const reddit = await redditStatsText();
   const sales = loadJson(F.sales, []);
@@ -661,6 +708,8 @@ function start() {
     console.log('Кошелёк USDT TRC20: ' + WALLET + ' · цена: ' + PRICE + ' USDT');
     console.log('Состояние: ' + DIR);
     scheduleDigest();
+    setTimeout(redditWatchTick, 2 * 60 * 1000);
+    setInterval(() => { redditWatchTick(); }, 30 * 60 * 1000).unref();
         console.log('Алерты: Telegram(' + (process.env.ALERT_TELEGRAM_TOKEN ? 'вкл' : 'выкл') +
       ') webhook(' + (process.env.ALERT_WEBHOOK_URL ? 'вкл' : 'выкл') + ') → /admin');
     // анти-усыпление (KEEP_AWAKE=1 + PUBLIC_URL): сам пингует свой публичный
@@ -677,4 +726,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, screenAddress, recordAmlHold, releaseAmlHold, dailyDigestText, F, AML, ADMIN_KEY };
+module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, screenAddress, recordAmlHold, releaseAmlHold, dailyDigestText, redditWatchTick, F, AML, ADMIN_KEY };
