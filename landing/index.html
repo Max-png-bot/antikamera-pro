@@ -4,9 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>АнтиКамера PRO — проверьте комнату на скрытые камеры за 5 минут</title>
+<meta name="description" content="Как найти скрытую камеру в квартире или отеле: детектор блика объектива по вспышке телефона + анализ теплового видео. Бесплатно, офлайн, без отправки данных.">
 <meta property="og:title" content="АнтиКамера PRO — найдите скрытую камеру телефоном за 2 минуты">
 <meta property="og:description" content="Два детектора: блик объектива по вспышке вашего телефона + тепло работающей электроники. Бесплатно, офлайн, данные остаются на телефоне.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://antikamera-pro.onrender.com/landing/">
+<meta property="og:image" content="https://antikamera-pro.onrender.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
 <style>
   :root{--bg:#0b0f14;--card:#131a23;--card2:#1a2330;--line:#26313f;--tx:#e8eef5;--tx2:#93a3b5;--acc:#ff9440;--grn:#38d16a}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -144,6 +148,12 @@
     </div>
   </div>
 
+  <div id="fbSummary" class="buy" style="display:none">
+    <h2 style="margin-top:0">Что говорят пользователи</h2>
+    <div id="fbAvg" style="text-align:center;font-size:17px;color:#ffd9a8;margin-bottom:6px"></div>
+    <div id="fbQuotes"></div>
+  </div>
+
   <div class="faq">
     <h2 class="sec">Частые вопросы</h2>
     <details><summary>Почему оплата криптовалютой?</summary>
@@ -217,6 +227,23 @@ document.getElementById('btnVerify').onclick = async function () {
     m.textContent = 'Автовыдача временно недоступна — напишите на почту из подвала страницы, код вышлем вручную.';
   }
 };
+(function loadFeedbackSummary() {
+  fetch('/api/public/summary').then(function (r) { return r.json(); }).then(function (s) {
+    if (!s || !s.count) return;
+    var box = document.getElementById('fbSummary');
+    box.style.display = '';
+    document.getElementById('fbAvg').textContent =
+      '★ ' + s.avg + ' из 5 · ' + s.count + ' ' +
+      (s.count % 10 === 1 && s.count % 100 !== 11 ? 'отзыв' : (s.count % 10 >= 2 && s.count % 10 <= 4 ? 'отзыва' : 'отзывов'));
+    var q = document.getElementById('fbQuotes');
+    (s.quotes || []).forEach(function (item) {
+      var d = document.createElement('div');
+      d.style.cssText = 'background:#0e141b;border:1px dashed #3a4a5e;border-radius:10px;padding:9px 12px;margin-top:8px;font-size:13.5px;color:#c6d3e2';
+      d.textContent = '“' + item.text + '”';
+      q.appendChild(d);
+    });
+  }).catch(function () {});
+})();
 </script>
 </body>
 </html>

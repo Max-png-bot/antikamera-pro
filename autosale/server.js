@@ -43,6 +43,7 @@ const F = {
   sales: path.join(DIR, 'sales_log.json'),
   redeemed: path.join(DIR, 'redemptions.json'),
   feedback: path.join(DIR, 'feedback.json'),
+  alerts: path.join(DIR, 'alerts.json'),
 };
 fs.mkdirSync(DIR, { recursive: true });
 
@@ -157,6 +158,7 @@ async function verifyPayment(hash, fetchImpl) {
   const sales = loadJson(F.sales, []);
   sales.push({ ts: Date.now(), hash: h, from: tx.from || '', amount, code, source });
   saveJson(F.sales, sales.slice(-2000));
+  alertSales(`ПРОДАЖА! ${amount} USDT (tx ${h.slice(0, 10)}…) — код ${code} выдан автоматически. Продаж за всё время: ${sales.length}, выручка: ${sales.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT`);
   return { ok: true, code, amount };
 }
 
@@ -228,6 +230,40 @@ function codeWasSold(code) {
     return fs.readFileSync(F.stock, 'utf8').split('\n')
       .some(l => l.toUpperCase().startsWith(c) && l.includes('| продан'));
   } catch (_) { return false; }
+}
+
+/* ---------- круглосуточный мониторинг: алерты и дайджесты ---------- */
+/* Куда бить тревогу (любой из каналов, переменными окружения):
+   ALERT_TELEGRAM_TOKEN + ALERT_TELEGRAM_CHAT_ID — бот в Telegram;
+   ALERT_WEBHOOK_URL — любой вебхук (Slack/Discord/свой). Пусто → копятся
+   в alerts.json и видны в панели /admin. */
+async function notify(text) {
+  try {
+    const token = process.env.ALERT_TELEGRAM_TOKEN;
+    const chat = process.env.ALERT_TELEGRAM_CHAT_ID;
+    if (token && chat) {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chat, text }),
+      });
+    }
+    const hook = process.env.ALERT_WEBHOOK_URL;
+    if (hook) {
+      await fetch(hook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, ts: Date.now() }),
+      });
+    }
+  } catch (_) { /* каналы оповещения не должны ронять продажи */ }
+}
+
+function alertSales(text) {
+  const list = loadJson(F.alerts, []);
+  list.push({ ts: Date.now(), text });
+  saveJson(F.alerts, list.slice(-500));
+  notify('🔔 АнтиКамера PRO: ' + text);
 }
 
 /* ---------- панель админа ---------- */
@@ -329,6 +365,9 @@ function start() {
           contact: String(d.contact || '').slice(0, 100),
         });
         saveJson(F.feedback, fb.slice(-2000));
+        if (+d.rating <= 3) {
+          alertSales(`НЕГАТИВНЫЙ ОТЗЫВ (${d.rating}★): «${String(d.text || '').slice(0, 200)}» ${d.contact ? '· контакт: ' + d.contact : ''} — приоритет к улучшению!`);
+        }
         return json(res, 200, { ok: true });
       } catch (_) {
         return json(res, 400, { ok: false });
@@ -346,6 +385,23 @@ function start() {
       return json(res, 200, { valid: codeWasSold(c), code: c });
     }
 
+    /* публичная сводка отзывов — для лендинга (контакты не разглашаются) */
+    if (u.pathname === '/api/public/summary') {
+      const fb = loadJson(F.feedback, []);
+      const good = fb.filter(x => +x.rating >= 4 && (x.text || '').trim());
+      const strip = s => String(s).replace(/[<>]/g, '').slice(0, 140);
+      return json(res, 200, {
+        count: fb.length,
+        avg: fb.length ? +(fb.reduce((s, x) => s + (+x.rating || 0), 0) / fb.length).toFixed(1) : 0,
+        quotes: good.slice(-3).reverse().map(x => ({ rating: +x.rating, text: strip(x.text) })),
+      });
+    }
+
+    /* живость для внешних аптайм-мониторов */
+    if (u.pathname === '/healthz') {
+      return json(res, 200, { ok: true, uptime: Math.round(process.uptime()), sales: loadJson(F.sales, []).length });
+    }
+
     if (u.pathname === '/api/stats') {
       if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
       const sales = loadJson(F.sales, []);
@@ -360,6 +416,7 @@ function start() {
         codesLeft: stock,
         sales: sales.slice(-50),
         feedback: feedbackStats(),
+        alerts: loadJson(F.alerts, []).slice(-10),
         wallet: WALLET,
         price: PRICE,
       });
@@ -385,6 +442,17 @@ function start() {
     console.log('Панель:      http://localhost:' + PORT + '/admin?key=' + ADMIN_KEY);
     console.log('Кошелёк USDT TRC20: ' + WALLET + ' · цена: ' + PRICE + ' USDT');
     console.log('Состояние: ' + DIR);
+    console.log('Алерты: Telegram(' + (process.env.ALERT_TELEGRAM_TOKEN ? 'вкл' : 'выкл') +
+      ') webhook(' + (process.env.ALERT_WEBHOOK_URL ? 'вкл' : 'выкл') + ') → /admin');
+    // анти-усыпление (KEEP_AWAKE=1 + PUBLIC_URL): сам пингует свой публичный
+    // адрес каждые 10 минут — бесплатный инстанс Render не засыпает
+    if (process.env.KEEP_AWAKE === '1' && process.env.PUBLIC_URL) {
+      const self = process.env.PUBLIC_URL.replace(/\/$/, '');
+      setInterval(() => {
+        fetch(self + '/healthz').catch(() => {});
+      }, 10 * 60 * 1000).unref();
+      console.log('Анти-усыпление: вкл (' + self + ')');
+    }
   });
   return server;
 }
