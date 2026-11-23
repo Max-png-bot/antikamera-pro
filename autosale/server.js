@@ -151,6 +151,19 @@ async function verifyPayment(hash, fetchImpl) {
   const amount = parseInt(tx.value || '0', 10) / 1e6;
   if (!(amount >= PRICE - 0.001)) return { ok: false, reason: 'below_price', amount };
 
+  // AML-скрининг отправителя ДО выдачи кода (v4)
+  const scr = await screenAddress(tx.from, fetchImpl);
+  if (scr.action === 'reject') {
+    recordAmlHold(h, tx.from, amount, scr);
+    alertSales(`AML: платёж ${amount} USDT ОТКЛОНЁН (${scr.level}: ${scr.detail}). Отправитель ${tx.from}. Код НЕ выдан — вернуть средства вручную; отпустить код: /api/aml/release?hash=${h}`);
+    return { ok: false, reason: 'aml_risk' };
+  }
+  if (scr.action === 'hold') {
+    recordAmlHold(h, tx.from, amount, scr);
+    alertSales(`AML: платёж ${amount} USDT на ручной проверке (${scr.level}: ${scr.detail}). Отправитель ${tx.from}. Решение: /api/aml/release?hash=${h}`);
+    return { ok: false, reason: 'aml_review' };
+  }
+
   // оплата подтверждена — выдать код и записать
   const { code, source } = takeCodeFromStock(h, amount);
   redeemed.push({ hash: h, code, amount, from: tx.from || '', ts: Date.now() });
@@ -264,6 +277,115 @@ function alertSales(text) {
   list.push({ ts: Date.now(), text });
   saveJson(F.alerts, list.slice(-500));
   notify('🔔 АнтиКамера PRO: ' + text);
+}
+
+/* ---------- AML-скрининг входящих платежей (v4) ----------
+   Прежде чем выдать код за оплату, проверяем АДРЕС ОТПРАВИТЕЛЯ:
+   1) локальный запрет-лист (сид OFAC + ручные добавления);
+   2) PublicAML Intelligence (реальное время): санкции OFAC/EU/иные,
+      хакерские адреса, даркнет, воры, миксеры, заморозки Tether/Circle.
+   Политика: LOW → выдать код; MEDIUM → hold на ручное решение владельца;
+   HIGH/CRITICAL/санкции/заморозка → ОТКАЗ (код не выдаётся, владелец
+   уведомляется для ручного возврата средств). API недоступен → код выдаётся
+   (fail-open), если AML_STRICT=1 — тогда hold. */
+const AML = {
+  seed: path.join(__dirname, 'aml_blocklist.seed.txt'),
+  blocklist: path.join(DIR, 'aml_blocklist.txt'),
+  cache: path.join(DIR, 'aml_cache.json'),
+  holds: path.join(DIR, 'aml_rejects.json'),
+};
+const AML_BAD_CATS = new Set(['sanction', 'hacker', 'ransomware', 'darknet',
+  'theft', 'stolen', 'launder', 'laundering', 'fraud', 'scam', 'phishing',
+  'terror', 'terrorist', 'mixer', 'gambling', 'csam']);
+
+function loadBlocklist() {
+  // base58 РЕГИСТРО-ЗАВИСИМ: валидируем запись как записана, сравнение — без учёта
+  const out = new Set();
+  for (const f of [AML.seed, AML.blocklist]) {
+    try {
+      for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
+        const a = line.split('|')[0].trim();
+        if (/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(a)) out.add(a.toUpperCase());
+      }
+    } catch (_) {}
+  }
+  return out;
+}
+
+async function screenAddress(addr, fetchImpl) {
+  const A = String(addr || '');
+  if (loadBlocklist().has(A.toUpperCase())) {
+    return { level: 'BLOCKLIST', action: 'reject', reason: 'aml_risk',
+      detail: 'адрес в запрет-листе (OFAC/владелец)' };
+  }
+  const cache = loadJson(AML.cache, {});
+  const hit = cache[A.toUpperCase()];
+  if (hit && Date.now() - hit.ts < 24 * 3600e3) return hit.result;
+  const fetchFn = fetchImpl || globalThis.fetch;
+  let result;
+  try {
+    const res = await fetchFn('https://intelapi.publicaml.org/v2/enrich', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addresses: [{ wallet_address: A, chain: 'tron' }], top_n: 1 }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    const ent = (j.entities || []).find(e => String(e.wallet_address || '').toUpperCase() === A.toUpperCase());
+    if (!ent || !ent.risk || !ent.risk.scored) {
+      result = { level: 'NO_DATA', action: process.env.AML_STRICT === '1' ? 'hold' : 'issue',
+        reason: 'no_data', detail: 'кошелёк без истории — не оценён (новый)' };
+    } else {
+      const r = ent.risk;
+      const level = String(r.level || '').toUpperCase();
+      const score = +r.score || 0;
+      const br = r.breakdown || {};
+      const cats = new Set();
+      if (br.direct_attribution && br.direct_attribution.category) cats.add(String(br.direct_attribution.category).toLowerCase());
+      if (br.outbound_direct && br.outbound_direct.category) cats.add(String(br.outbound_direct.category).toLowerCase());
+      const frozen = br.frozen_direct && (br.frozen_direct.issuers || []).length > 0;
+      if (frozen) cats.add('заморожен эмитентом USDT/USDC');
+      const directBad = [frozen, ...[...cats]].some(c => c === true || AML_BAD_CATS.has(String(c)));
+      const label = ent.label ? String(ent.label).slice(0, 80) : '';
+      if (directBad || level === 'CRITICAL' || level === 'HIGH') {
+        result = { level: level || 'HIGH', action: 'reject', reason: 'aml_risk',
+          detail: `score ${score}; категории: ${[...cats].join(', ') || 'уровень ' + level}; label: ${label}` };
+      } else if (level === 'MEDIUM' || score >= 30) {
+        result = { level: 'MEDIUM', action: 'hold', reason: 'aml_review',
+          detail: `score ${score}; label: ${label}` };
+      } else {
+        result = { level: level || 'LOW', action: 'issue', reason: 'clean', detail: `score ${score}` };
+      }
+    }
+  } catch (e) {
+    result = { level: 'ERR', action: process.env.AML_STRICT === '1' ? 'hold' : 'issue',
+      reason: 'api_unavailable', detail: String(e.message || e).slice(0, 120) };
+  }
+  const c2 = loadJson(AML.cache, {});
+  c2[A.toUpperCase()] = { ts: Date.now(), result };
+  saveJson(AML.cache, c2);
+  return result;
+}
+
+function recordAmlHold(h, from, amount, verdict) {
+  const holds = loadJson(AML.holds, []);
+  if (holds.some(x => x.hash === h)) return;
+  holds.push({ ts: Date.now(), hash: h, from, amount, verdict, released: false });
+  saveJson(AML.holds, holds.slice(-500));
+}
+
+function releaseAmlHold(hash) {
+  const holds = loadJson(AML.holds, []);
+  const h = holds.find(x => x.hash === hash && !x.released);
+  if (!h) return null;
+  h.released = true;
+  saveJson(AML.holds, holds);
+  const { code, source } = takeCodeFromStock(h.hash, h.amount);
+  const sales = loadJson(F.sales, []);
+  sales.push({ ts: Date.now(), hash: h.hash, from: h.from, amount: h.amount,
+    code, source, amlManualRelease: true });
+  saveJson(F.sales, sales.slice(-2000));
+  return { code, amount: h.amount };
 }
 
 /* ---------- панель админа ---------- */
@@ -385,6 +507,34 @@ function start() {
       return json(res, 200, { valid: codeWasSold(c), code: c });
     }
 
+    /* AML-админ (ключ обязателен): проверка адреса, hold-лист, возврат решения, пополнение блок-листа */
+    if (u.pathname === '/api/aml/check') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      const addr = (u.searchParams.get('address') || '').trim();
+      if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return json(res, 400, { error: 'bad address' });
+      const verdict = await screenAddress(addr);
+      return json(res, 200, { address: addr, verdict });
+    }
+    if (u.pathname === '/api/aml/holds') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      return json(res, 200, { list: loadJson(AML.holds, []) });
+    }
+    if (u.pathname === '/api/aml/release') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      const h = (u.searchParams.get('hash') || '').toLowerCase();
+      const r = releaseAmlHold(h);
+      if (!r) return json(res, 404, { error: 'hold not found or already released' });
+      alertSales(`AML: владелец подтвердил платёж ${h.slice(0, 10)}… вручную — код ${r.code} выдан`);
+      return json(res, 200, r);
+    }
+    if (u.pathname === '/api/aml/block') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      const addr = (u.searchParams.get('address') || '').trim();
+      if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return json(res, 400, { error: 'bad address' });
+      fs.appendFileSync(AML.blocklist, `${addr} | вручную владельцем | ${new Date().toISOString().slice(0, 10)}\n`);
+      return json(res, 200, { ok: true, blocked: addr });
+    }
+
     /* публичная сводка отзывов — для лендинга (контакты не разглашаются) */
     if (u.pathname === '/api/public/summary') {
       const fb = loadJson(F.feedback, []);
@@ -417,6 +567,11 @@ function start() {
         sales: sales.slice(-50),
         feedback: feedbackStats(),
         alerts: loadJson(F.alerts, []).slice(-10),
+        aml: {
+          holds: loadJson(AML.holds, []).filter(x => !x.released).length,
+          rejected: loadJson(AML.holds, []).length,
+          blocklist: loadBlocklist().size,
+        },
         wallet: WALLET,
         price: PRICE,
       });
@@ -458,4 +613,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, F, ADMIN_KEY };
+module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, screenAddress, recordAmlHold, releaseAmlHold, F, AML, ADMIN_KEY };
