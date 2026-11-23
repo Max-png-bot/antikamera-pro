@@ -279,8 +279,28 @@ function alertSales(text) {
   notify('🔔 АнтиКамера PRO: ' + text);
 }
 
+/* ---------- статистика Reddit-поста (для дайджеста) ---------- */
+async function redditStatsText() {
+  let url = (loadJson(path.join(DIR, 'reddit_post.json'), {}) || {}).url
+    || (loadJson(path.join(__dirname, 'reddit_post.json'), {}) || {}).url
+    || process.env.REDDIT_POST_URL;
+  if (!url) return '';
+  try {
+    const r = await fetch(url.replace(/\/$/, '') + '.json',
+      { headers: { 'User-Agent': 'antikamera-monitor/1.0' } });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const post = (j[0] && j[0].data && j[0].data.children
+      && j[0].data.children[0] && j[0].data.children[0].data) || {};
+    return `Reddit-пост: ${post.score ?? '?'} апвоутов · ${post.num_comments ?? '?'} комментариев\n`;
+  } catch (e) {
+    return 'Reddit-пост: статистика недоступна\n';
+  }
+}
+
 /* ---------- ежедневный дайджест владельцу (09:00 UTC) ---------- */
-function dailyDigestText() {
+async function dailyDigestText() {
+  const reddit = await redditStatsText();
   const sales = loadJson(F.sales, []);
   const dayAgo = Date.now() - 24 * 3600e3;
   const last24 = sales.filter(s => s.ts >= dayAgo);
@@ -298,6 +318,7 @@ function dailyDigestText() {
     `Отзывы: ${fb.count} (средняя ${fb.avg || '—'})${issues ? ' · топ проблем: ' + issues : ''}`,
     `AML-холды в ожидании: ${holds.length} · кодов на складе: ${stock}`,
     `Сервер жив: uptime ${Math.round(process.uptime() / 60)} мин · antikamera-pro.onrender.com`,
+    reddit,
   ].join('\n');
 }
 function scheduleDigest() {
@@ -305,7 +326,7 @@ function scheduleDigest() {
   const next = new Date();
   next.setUTCHours(9, 0, 0, 0);
   if (next.getTime() < Date.now()) next.setUTCDate(next.getUTCDate() + 1);
-  setTimeout(async () => { await notify(dailyDigestText()); scheduleDigest(); },
+  setTimeout(async () => { await notify(await dailyDigestText()); scheduleDigest(); },
     next.getTime() - Date.now()).unref();
   console.log('Дайджест владельцу запланирован на ' + next.toISOString());
 }
@@ -541,7 +562,7 @@ function start() {
     /* AML-админ (ключ обязателен): проверка адреса, hold-лист, возврат решения, пополнение блок-листа */
     if (u.pathname === '/api/digest') {
       if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
-      const text = dailyDigestText();
+      const text = await dailyDigestText();
       await notify(text);
       return json(res, 200, { sent: true, text });
     }
