@@ -279,6 +279,37 @@ function alertSales(text) {
   notify('🔔 АнтиКамера PRO: ' + text);
 }
 
+/* ---------- ежедневный дайджест владельцу (09:00 UTC) ---------- */
+function dailyDigestText() {
+  const sales = loadJson(F.sales, []);
+  const dayAgo = Date.now() - 24 * 3600e3;
+  const last24 = sales.filter(s => s.ts >= dayAgo);
+  const total = sales.reduce((s, x) => s + (+x.amount || 0), 0);
+  const fb = feedbackStats();
+  let stock = 0;
+  try {
+    stock = fs.readFileSync(F.stock, 'utf8').split('\n').filter(l => l.includes('| не продан')).length;
+  } catch (_) {}
+  const holds = loadJson(AML.holds, []).filter(h => !h.released);
+  const issues = (fb.topIssues || []).map(i => i.word).join(', ');
+  return [
+    '📊 АнтиКамера PRO — ежедневный итог',
+    `Продаж за 24 ч: ${last24.length} на ${last24.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT · всего: ${sales.length} на ${total.toFixed(1)} USDT`,
+    `Отзывы: ${fb.count} (средняя ${fb.avg || '—'})${issues ? ' · топ проблем: ' + issues : ''}`,
+    `AML-холды в ожидании: ${holds.length} · кодов на складе: ${stock}`,
+    `Сервер жив: uptime ${Math.round(process.uptime() / 60)} мин · antikamera-pro.onrender.com`,
+  ].join('\n');
+}
+function scheduleDigest() {
+  if (!(process.env.ALERT_TELEGRAM_TOKEN && process.env.ALERT_TELEGRAM_CHAT_ID)) return;
+  const next = new Date();
+  next.setUTCHours(9, 0, 0, 0);
+  if (next.getTime() < Date.now()) next.setUTCDate(next.getUTCDate() + 1);
+  setTimeout(async () => { await notify(dailyDigestText()); scheduleDigest(); },
+    next.getTime() - Date.now()).unref();
+  console.log('Дайджест владельцу запланирован на ' + next.toISOString());
+}
+
 /* ---------- AML-скрининг входящих платежей (v4) ----------
    Прежде чем выдать код за оплату, проверяем АДРЕС ОТПРАВИТЕЛЯ:
    1) локальный запрет-лист (сид OFAC + ручные добавления);
@@ -508,6 +539,12 @@ function start() {
     }
 
     /* AML-админ (ключ обязателен): проверка адреса, hold-лист, возврат решения, пополнение блок-листа */
+    if (u.pathname === '/api/digest') {
+      if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
+      const text = dailyDigestText();
+      await notify(text);
+      return json(res, 200, { sent: true, text });
+    }
     if (u.pathname === '/api/aml/check') {
       if (u.searchParams.get('key') !== ADMIN_KEY) return json(res, 403, { error: 'bad key' });
       const addr = (u.searchParams.get('address') || '').trim();
@@ -602,7 +639,8 @@ function start() {
     console.log('Панель:      http://localhost:' + PORT + '/admin?key=' + ADMIN_KEY);
     console.log('Кошелёк USDT TRC20: ' + WALLET + ' · цена: ' + PRICE + ' USDT');
     console.log('Состояние: ' + DIR);
-    console.log('Алерты: Telegram(' + (process.env.ALERT_TELEGRAM_TOKEN ? 'вкл' : 'выкл') +
+    scheduleDigest();
+        console.log('Алерты: Telegram(' + (process.env.ALERT_TELEGRAM_TOKEN ? 'вкл' : 'выкл') +
       ') webhook(' + (process.env.ALERT_WEBHOOK_URL ? 'вкл' : 'выкл') + ') → /admin');
     // анти-усыпление (KEEP_AWAKE=1 + PUBLIC_URL): сам пингует свой публичный
     // адрес каждые 10 минут — бесплатный инстанс Render не засыпает
@@ -618,4 +656,4 @@ function start() {
 }
 
 if (require.main === module) start();
-module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, screenAddress, recordAmlHold, releaseAmlHold, F, AML, ADMIN_KEY };
+module.exports = { verifyPayment, mintCode, checkCode, feedbackStats, takeCodeFromStock, codeWasSold, screenAddress, recordAmlHold, releaseAmlHold, dailyDigestText, F, AML, ADMIN_KEY };
