@@ -35,6 +35,11 @@ const PORT = +(process.env.PORT || 8083);
 const ADMIN_KEY = process.env.ADMIN_KEY || crypto.randomBytes(9).toString('base64url');
 const WALLET = process.env.WALLET || 'TBA8d1eLJhLVKGjQfeDcxvEJTmrq7Nzrc9';
 const PRICE = +(process.env.PRICE || 9.9);
+const PROMO_PRICE = 6.9;   // стартовая цена для первых покупателей
+const PROMO_FIRST = 10;    // сколько продаж по промо-цене
+function minAcceptedAmount() {
+  return loadJson(F.sales, []).length < PROMO_FIRST ? PROMO_PRICE : PRICE;
+}
 const TRONGRID_KEY = process.env.TRONGRID_KEY || '';
 const USDT_TRC20 = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // контракт USDT в TRON
 
@@ -44,6 +49,7 @@ const F = {
   redeemed: path.join(DIR, 'redemptions.json'),
   feedback: path.join(DIR, 'feedback.json'),
   alerts: path.join(DIR, 'alerts.json'),
+  visits: path.join(DIR, 'visits.json'),
 };
 fs.mkdirSync(DIR, { recursive: true });
 
@@ -149,7 +155,8 @@ async function verifyPayment(hash, fetchImpl) {
   const tokenAddr = String((tx.token_info && tx.token_info.address) || '');
   if (symbol !== 'USDT' && tokenAddr !== USDT_TRC20) return { ok: false, reason: 'wrong_token' };
   const amount = parseInt(tx.value || '0', 10) / 1e6;
-  if (!(amount >= PRICE - 0.001)) return { ok: false, reason: 'below_price', amount };
+  const need = minAcceptedAmount();
+  if (!(amount >= need - 0.001)) return { ok: false, reason: 'below_price', amount };
 
   // AML-скрининг отправителя ДО выдачи кода (v4)
   const scr = await screenAddress(tx.from, fetchImpl);
@@ -215,6 +222,7 @@ function serveStatic(req, res, pathname) {
   if (!full.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(full, (err, data) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('not found'); return; }
+    if (path.extname(full).toLowerCase() === '.html') trackVisit(rel);
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': rel === '/sw.js' ? 'no-cache' : 'public, max-age=3600',
@@ -277,6 +285,31 @@ function alertSales(text) {
   list.push({ ts: Date.now(), text });
   saveJson(F.alerts, list.slice(-500));
   notify('🔔 АнтиКамера PRO: ' + text);
+}
+
+/* ---------- счётчик визитов страниц ---------- */
+function trackVisit(rel) {
+  try {
+    const page = rel === '/index.html' ? 'app'
+      : rel.startsWith('/blog') ? 'blog'
+      : rel.startsWith('/en') ? 'en' : 'ru';
+    const day = new Date().toISOString().slice(0, 10);
+    const v = loadJson(F.visits, {});
+    v[day] = v[day] || {};
+    v[day][page] = (v[day][page] || 0) + 1;
+    saveJson(F.visits, v);
+  } catch (_) {}
+}
+function visits24() {
+  const v = loadJson(F.visits, {});
+  const out = { app: 0, ru: 0, en: 0, blog: 0 };
+  const now = Date.now();
+  for (let i = 0; i < 2; i++) {
+    const d = new Date(now - i * 86400e3).toISOString().slice(0, 10);
+    const day = v[d] || {};
+    for (const k of Object.keys(out)) out[k] += day[k] || 0;
+  }
+  return out;
 }
 
 /* ---------- статистика Reddit-поста (для дайджеста) ---------- */
@@ -358,10 +391,10 @@ async function redditWatchTick() {
   } catch (_) { /* наблюдение не должно ронять сервер */ }
 }
 
-/* ---------- ежеме........DIGEST_MARKER_54321 ---------- */
-
+/* ---------- ежедневный дайджест владельцу (09:00 UTC) ---------- */
 async function dailyDigestText() {
   const reddit = await redditStatsText();
+  const vis = visits24();
   const sales = loadJson(F.sales, []);
   const dayAgo = Date.now() - 24 * 3600e3;
   const last24 = sales.filter(s => s.ts >= dayAgo);
@@ -378,6 +411,8 @@ async function dailyDigestText() {
     `Продаж за 24 ч: ${last24.length} на ${last24.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT · всего: ${sales.length} на ${total.toFixed(1)} USDT`,
     `Отзывы: ${fb.count} (средняя ${fb.avg || '—'})${issues ? ' · топ проблем: ' + issues : ''}`,
     `AML-холды в ожидании: ${holds.length} · кодов на складе: ${stock}`,
+    `Визиты (за 48 ч): приложение ${vis.app} · RU ${vis.ru} · EN ${vis.en} · блог ${vis.blog}`,
+    `Цена: ${loadJson(F.sales, []).length < PROMO_FIRST ? PROMO_PRICE + ' USDT промо (осталось ' + (PROMO_FIRST - loadJson(F.sales, []).length) + ')' : PRICE + ' USDT'}`,
     `Сервер жив: uptime ${Math.round(process.uptime() / 60)} мин · antikamera-pro.onrender.com`,
     reddit,
   ].join('\n');
@@ -659,7 +694,12 @@ function start() {
       const fb = loadJson(F.feedback, []);
       const good = fb.filter(x => +x.rating >= 4 && (x.text || '').trim());
       const strip = s => String(s).replace(/[<>]/g, '').slice(0, 140);
+      const sales = loadJson(F.sales, []);
       return json(res, 200, {
+        price: PRICE,
+        promoPrice: PROMO_PRICE,
+        promoLeft: Math.max(0, PROMO_FIRST - sales.length),
+        visits: visits24(),
         count: fb.length,
         avg: fb.length ? +(fb.reduce((s, x) => s + (+x.rating || 0), 0) / fb.length).toFixed(1) : 0,
         quotes: good.slice(-3).reverse().map(x => ({ rating: +x.rating, text: strip(x.text) })),

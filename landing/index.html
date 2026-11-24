@@ -93,10 +93,17 @@
       <p>Работающая электроника греется. Загружаете видео с тепловизора (USB-C-модуль или телефон с тепловой камерой) — приложение находит маленькие устойчивые тёплые точки.</p></div>
   </div>
 
+    <div class="card" style="background:linear-gradient(160deg,#1c2735,#131a23);border:1px solid #3a4a5e;border-radius:18px;padding:18px;margin-top:22px">
+    <h3 style="margin:0 0 10px;font-size:14px;color:var(--tx2);font-weight:600;text-transform:uppercase;letter-spacing:.6px">Смотрите, как это работает</h3>
+    <canvas id="demoCv" width="640" height="240" style="width:100%;height:auto;border-radius:10px;background:#05070a"></canvas>
+    <div style="font-size:12.5px;color:var(--tx2);margin-top:8px">Живая демонстрация принципа: вспышка телефона мигает (индикатор справа снизу) — объектив «камеры» вспыхивает строго в такт, и детектор подтверждает его красной рамкой. Красный светодиод горит всегда — он остаётся лишь кандидатом. Полная демонстрация — в приложении, кнопка «Демо».</div>
+  </div>
+
   <div class="buy">
     <h2>Разблокировать PRO</h2>
-    <div class="price">9.9 <small>USDT</small></div>
+    <div class="price" id="price">9.9 <small>USDT</small></div>
     <div class="onetime">разовая оплата · без подписок · все обновления v1.x включены</div>
+    <div class="onetime" id="promoBanner" style="display:none;color:#ffd9a8;font-weight:700"></div>
 
     <div class="wallet">
       <div class="lbl">Кошелёк для оплаты (USDT, сеть TRC20)</div>
@@ -114,7 +121,7 @@
       </div>
       <div>
         <ol class="how">
-          <li>Переведите <b>9.9 USDT</b> на кошелёк слева (QR или копирование). Сеть — <b>только TRC20</b>.</li>
+          <li>Переведите <b id="payAmount">9.9 USDT</b> на кошелёк слева (QR или копирование). Сеть — <b>только TRC20</b>.</li>
           <li>Скопируйте <b>хэш транзакции</b> (длинная строка из истории перевода) и вставьте его в форму «Автоматическая выдача кода» ниже — <b>код появится сразу</b>, без переписки и ожидания.</li>
           <li>Откройте приложение → раздел <b>PRO</b> → введите код (или вставьте хэш прямо там — код придёт автоматически). Готово!</li>
         </ol>
@@ -245,6 +252,88 @@ document.getElementById('btnVerify').onclick = async function () {
       q.appendChild(d);
     });
   }).catch(function () {});
+})();
+</script>
+
+<script>
+(function () {
+  // динамическая промо-цена
+  fetch('/api/public/summary').then(function (r) { return r.json(); }).then(function (s) {
+    if (!s || !s.promoLeft) return;
+    var p = document.getElementById('price');
+    if (p) p.innerHTML = s.promoPrice + ' <small>USDT</small>';
+    var a = document.getElementById('payAmount');
+    if (a) a.textContent = s.promoPrice + ' USDT';
+    var b = document.getElementById('promoBanner');
+    if (b) {
+      b.style.display = '';
+      b.textContent = '🚀 Стартовая цена ' + s.promoPrice + ' USDT вместо 9.9 — для первых ' +
+        (s.promoLeft + (s.promoLeft ? 0 : 0)) + ' покупателей (осталось ' + s.promoLeft + ')';
+    }
+    var be = document.getElementById('promoBannerEn');
+    if (be) {
+      be.style.display = '';
+      be.textContent = '🚀 Launch price ' + s.promoPrice + ' USDT instead of 9.9 — first 10 buyers only (' + s.promoLeft + ' left)';
+    }
+  }).catch(function () {});
+  // мини-демо на canvas
+  var cv = document.getElementById('demoCv');
+  if (!cv) return;
+  var ctx = cv.getContext('2d');
+  var ru = document.documentElement.lang === 'ru';
+  var t0 = performance.now(), confirmed = 0, seen = 0;
+  var LENS = { x: 470, y: 95 }, LED = { x: 90, y: 190 };
+  function frame(now) {
+    var t = now - t0;
+    if (t > 16000) { t0 = now; confirmed = 0; t = 0; }
+    var flashOn = Math.floor(t / 900) % 2 === 1;
+    if (flashOn && !seen) { seen = 1; confirmed++; }
+    if (!flashOn) seen = 0;
+    ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, 640, 240);
+    // предметы
+    ctx.fillStyle = '#1a2330'; ctx.fillRect(432, 55, 78, 62);
+    ctx.fillStyle = '#131a23'; ctx.fillRect(55, 160, 70, 58);
+    ctx.fillStyle = '#26313f'; ctx.fillRect(240, 140, 120, 80);
+    // индикатор вспышки
+    ctx.fillStyle = flashOn ? '#ff9440' : '#3a3a3a';
+    ctx.beginPath(); ctx.arc(600, 222, 11, 0, 7); ctx.fill();
+    ctx.fillStyle = flashOn ? '#ffb020' : '#3a3a3a';
+    ctx.fillRect(586, 200, 28, 10);
+    // LED всегда горит
+    var pulse = .6 + .4 * Math.sin(t / 200);
+    ctx.fillStyle = 'rgba(255,70,70,' + pulse + ')';
+    ctx.beginPath(); ctx.arc(LED.x, LED.y, 4, 0, 7); ctx.fill();
+    // блик линзы — только при вспышке
+    if (flashOn) {
+      var g = ctx.createRadialGradient(LENS.x, LENS.y, 0, LENS.x, LENS.y, 20);
+      g.addColorStop(0, 'rgba(255,255,255,1)');
+      g.addColorStop(.4, 'rgba(255,245,220,.85)');
+      g.addColorStop(1, 'rgba(255,240,210,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(LENS.x, LENS.y, 20, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = '#20262e'; ctx.beginPath(); ctx.arc(LENS.x, LENS.y, 4, 0, 7); ctx.fill();
+    }
+    // рамки
+    function box(x, y, w, h, color, label, dash) {
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.setLineDash(dash ? [5, 4] : []);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+      ctx.font = '700 12px system-ui';
+      var tw = ctx.measureText(label).width + 10;
+      ctx.fillStyle = 'rgba(15,20,28,.9)'; ctx.fillRect(x, y - 18, tw, 16);
+      ctx.fillStyle = '#fff'; ctx.fillText(label, x + 5, y - 6);
+    }
+    if (confirmed >= 5) {
+      var blink = t % 700 < 350;
+      if (blink) box(448, 40, 46, 56, '#ff4d4d', ru ? 'КАМЕРА?' : 'CAMERA?', false);
+    } else if (confirmed >= 2) {
+      box(448, 40, 46, 56, '#ffb020', ru ? 'блик?' : 'glint?', true);
+    }
+    box(64, 168, 52, 44, '#ffb020', ru ? 'блик' : 'glint', true);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
 })();
 </script>
 </body>
