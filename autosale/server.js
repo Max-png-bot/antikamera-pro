@@ -333,6 +333,17 @@ async function redditWatchTick() {
     st.score = post.score;
     st.ts = Date.now();
     saveJson(stateF, st);
+    const removed = !!(post.banned_by || (post.removed_by_category && post.removed_by_category !== 'moderator_ignored' && post.removed_by_category !== 'author'));
+    const statusChanged = st.removed === undefined ? removed !== false : st.removed !== removed;
+    st.removed = removed;
+    if (statusChanged) {
+      notify(removed
+        ? '🔔 АнтиКамера PRO: ⚠️ Reddit-пост СНОВA скрыт/удалён — план в marketing/reddit_recovery.md'
+        : '🔔 АнтиКамера PRO: ✅ Reddit-пост ВИДЕН в ленте (фильтр снят) — трафик пошёл!');
+    }
+    if (st.score !== undefined && post.score > st.score) {
+      notify('🔔 АнтиКамера PRO: 🔺 Reddit-пост: ' + post.score + ' апвоутов (+' + (post.score - st.score) + ')');
+    }
     if (fresh.length) {
       let txt = `💬 Reddit-пост: ${fresh.length} новых комментариев (апвоутов: ${post.score})\n`;
       for (const f of fresh.slice(0, 8)) {
