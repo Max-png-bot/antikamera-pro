@@ -1,5 +1,5 @@
-/* АнтиКамера PRO — service worker: офлайн-кэш */
-const CACHE = 'antikamera-pro-v1';
+/* АнтиКамера PRO — service worker v2: офлайн-кэш + свежие обновления */
+const CACHE = 'antikamera-pro-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -31,14 +31,34 @@ self.addEventListener('fetch', e => {
   try {
     const u = new URL(e.request.url);
     if (u.pathname.startsWith('/api/')) return;
-  } catch (_) {}
-  // запросы других доминов (нет таких) тоже не перехватываем
-  if (new URL(e.request.url).origin !== self.location.origin) return;
+    if (u.origin !== self.location.origin) return;
+  } catch (_) { return; }
+
+  // HTML-страницы: сперва сеть (пользователь всегда получает свежую версию),
+  // офлайн — из кэша. Так обновления приложения приходят сразу.
+  const isNavigate = e.request.mode === 'navigate' ||
+    (e.request.headers.get('accept') || '').includes('text/html');
+  if (isNavigate) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(e.request, { ignoreSearch: true })
+          .then(c => c || caches.match('./')))
+    );
+    return;
+  }
+
+  // ассеты (иконки и т.п.) — cache-first
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(res => {
-        if (res && res.ok && new URL(e.request.url).origin === self.location.origin) {
+        if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, copy));
         }

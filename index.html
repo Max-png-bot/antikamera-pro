@@ -615,7 +615,9 @@ const G = (function () {
           S.mode = 'cont'; syncModeUI();
         }
       } catch (e) {
-        banner('Нет доступа к камере: ' + e.message + (String(e.name) === 'NotAllowedError' ? ' — разрешите камеру в настройках браузера.' : ''));
+        banner('Нет доступа к камере: ' + e.message + (String(e.name) === 'NotAllowedError' ?
+          ' — разрешите камеру в настройках браузера.' :
+          (String(e.name) === 'NotFoundError' ? ' — камера на устройстве не найдена; нажмите «Демо», чтобы увидеть принцип работы.' : '')));
         addLog(now2(), 'БЛИК: ошибка доступа к камере: ' + e.message, 0);
         return;
       }
@@ -1010,14 +1012,16 @@ const App = (function () {
     deferredPrompt = null;
     $('btnInstall').style.display = 'none';
   };
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+    (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
   if (isIOS) {
     $('installHint').innerHTML =
       '<b>iPhone/iPad:</b> откройте эту страницу в <b>Safari</b> → кнопка «Поделиться» ' +
       '(квадрат со стрелкой вверх) → прокрутите и нажмите «<b>На экран “Домой”</b>» → «Добавить». ' +
       'Появится иконка «АнтиКамера PRO», приложение будет работать офлайн.<br>' +
-      '<span style="color:#93a3b5">Примечание: в iOS-версии через браузер вспышкой управлять нельзя — ' +
-      'режим «Блик» использует непрерывный свет; полная поддержка — в нативном приложении (App Store).</span>';
+      '<span style="color:#93a3b5">Совет: на время проверки включите фонарик из «Пункта управления» ' +
+      '(свайп из правого верхнего угла) — Safari не разрешает веб-странице управлять вспышкой, ' +
+      'поэтому режим «Блик» подхватит ваш ручной фонарик (непрерывный режим включится сам).</span>';
   }
   const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (standalone) {

@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "АнтиКамера PRO — детектор скрытых камер и электроники",
   "short_name": "АнтиКамера PRO",
   "description": "Два детектора в одном: поиск скрытых видеокамер по блику линзы (вспышка) и поиск работающей электроники по тепловому следу (видео с тепловизора). Вся обработка локально.",
@@ -6,7 +7,7 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#0b0f14",
   "theme_color": "#0b0f14",
   "categories": ["utilities", "security", "lifestyle"],
