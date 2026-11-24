@@ -270,7 +270,7 @@ function serveStatic(req, res, pathname) {
     if (path.extname(full).toLowerCase() === '.html') trackVisit(rel);
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(full).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': (rel === '/sw.js' || path.extname(full).toLowerCase() === '.html') ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': (rel === '/sw.js' || rel === '/ref-links.js' || path.extname(full).toLowerCase() === '.html') ? 'no-cache' : 'public, max-age=3600',
     });
     res.end(data);
   });
