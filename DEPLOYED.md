@@ -219,3 +219,8 @@ https://antikamera-pro.onrender.com/landing/
   от chat_id владельца, дедупликация по update_id;
 - Команды /release и /block — полноценное управление AML с телефона;
   /digest — полный отчёт по требованию.
+
+## v12: FAQ-разметка + Яндекс (24.11.2026)
+
+- FAQPage JSON-LD (4 вопроса × 7 языковых страниц) — rich snippets в Google;
+- Yandex IndexNow: 10 URL отправлены (202) — русский поиск подключён.
