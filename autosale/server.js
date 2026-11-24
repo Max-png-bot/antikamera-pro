@@ -218,6 +218,9 @@ function serveStatic(req, res, pathname) {
   if (rel === '/') rel = '/index.html';
   if (rel === '/landing' || rel === '/landing/') rel = '/landing/index.html';
   if (rel === '/en' || rel === '/en/') rel = '/en/index.html';
+  if (rel === '/zh' || rel === '/zh/') rel = '/zh/index.html';
+  if (rel === '/ja' || rel === '/ja/') rel = '/ja/index.html';
+  if (rel === '/ko' || rel === '/ko/') rel = '/ko/index.html';
   const full = path.normalize(path.join(ROOT, rel));
   if (!full.startsWith(ROOT + path.sep)) { res.writeHead(403); res.end('forbidden'); return; }
   fs.readFile(full, (err, data) => {
@@ -292,7 +295,10 @@ function trackVisit(rel) {
   try {
     const page = rel === '/index.html' ? 'app'
       : rel.startsWith('/blog') ? 'blog'
-      : rel.startsWith('/en') ? 'en' : 'ru';
+      : rel.startsWith('/en') ? 'en'
+      : rel.startsWith('/zh') ? 'zh'
+      : rel.startsWith('/ja') ? 'ja'
+      : rel.startsWith('/ko') ? 'ko' : 'ru';
     const day = new Date().toISOString().slice(0, 10);
     const v = loadJson(F.visits, {});
     v[day] = v[day] || {};
@@ -302,7 +308,7 @@ function trackVisit(rel) {
 }
 function visits24() {
   const v = loadJson(F.visits, {});
-  const out = { app: 0, ru: 0, en: 0, blog: 0 };
+  const out = { app: 0, ru: 0, en: 0, zh: 0, ja: 0, ko: 0, blog: 0 };
   const now = Date.now();
   for (let i = 0; i < 2; i++) {
     const d = new Date(now - i * 86400e3).toISOString().slice(0, 10);
@@ -411,7 +417,7 @@ async function dailyDigestText() {
     `Продаж за 24 ч: ${last24.length} на ${last24.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT · всего: ${sales.length} на ${total.toFixed(1)} USDT`,
     `Отзывы: ${fb.count} (средняя ${fb.avg || '—'})${issues ? ' · топ проблем: ' + issues : ''}`,
     `AML-холды в ожидании: ${holds.length} · кодов на складе: ${stock}`,
-    `Визиты (за 48 ч): приложение ${vis.app} · RU ${vis.ru} · EN ${vis.en} · блог ${vis.blog}`,
+    `Визиты (за 48 ч): приложение ${vis.app} · RU ${vis.ru} · EN ${vis.en} · ZH ${vis.zh} · JA ${vis.ja} · KO ${vis.ko} · блог ${vis.blog}`,
     `Цена: ${loadJson(F.sales, []).length < PROMO_FIRST ? PROMO_PRICE + ' USDT промо (осталось ' + (PROMO_FIRST - loadJson(F.sales, []).length) + ')' : PRICE + ' USDT'}`,
     `Сервер жив: uptime ${Math.round(process.uptime() / 60)} мин · antikamera-pro.onrender.com`,
     reddit,
