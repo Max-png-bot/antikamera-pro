@@ -175,7 +175,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">获取激活码</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="好友推荐码（如有人邀请你——可选）" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ 粘贴后请目视核对地址（以「TBA8d1e…」开头、以「…q7Nzrc9」结尾）。转入错误地址或错误网络的资金无法找回。</div>
       </div>
@@ -201,7 +203,7 @@
   <div class="faq">
     <h2 class="sec">常见问题</h2>
     <details><summary>为什么用加密货币付款？</summary>
-      <div class="a">即时到账、无国界限制、不经过银行，TRON 网络手续费低（约 $1）。USDT 是与美元挂钩的稳定币：9.9 USDT ≈ 9.9 美元。激活码由服务器在区块链上核实付款后自动即时发放。</div></details>
+      <div class="a">即时到账、无国界限制、不经过银行，TRON 网络手续费低（约 $1）。USDT 是与美元挂钩的稳定币：9.9 USDT ≈ 9.9 美元。激活码由服务器在区块链上核实付款后自动即时发放。 新手教程：<a href="/blog/en-usdt.html">5分钟购买 USDT</a>。</div></details>
     <details><summary>真的有用吗，还是又一个骗人的检测应用？</summary>
       <div class="a">问得好——大多数"检测"应用确实是垃圾。这一款是诚实的物理学：把安全专家推荐的"手电筒照镜头"方法自动化（脉冲闪光 + 同步过滤），外加热成像视频分析。付款前可以免费验证效果，而且它公开说明自己的局限（见下一条）。</div></details>
     <details><summary>诚实的局限是什么？</summary>
@@ -252,11 +254,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = '正在 TRON 区块链上核实交易…';
   try {
-    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ 付款已确认！你的激活码：' + j.code + ' ——在应用的 PRO 区域输入即可。';
+      m.textContent = '✓ 付款已确认！你的激活码：' + j.code + ' ——在应用的 PRO 区域输入即可。\n' +
+        '🎯 你的好友码：' + (j.referral || '—') + ' ——朋友支付 7.9 而非 9.9，你获得一个 PRO 礼品码。' +
+        (j.gift ? '\n🎁 给邀请你的朋友的礼品码：' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {

@@ -175,7 +175,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">コードを受け取る</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="友人の紹介コード（招待された場合 — 任意）" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ 貼り付けた後、アドレスを目視で再確認してください（「TBA8d1e…」で始まり「…q7Nzrc9」で終わる）。誤ったアドレスや誤ったネットワークへの送金は取り戻せません。</div>
       </div>
@@ -201,7 +203,7 @@
   <div class="faq">
     <h2 class="sec">よくある質問</h2>
     <details><summary>なぜ暗号資産での支払いなのですか？</summary>
-      <div class="a">即時・国境なし・銀行不要で、TRONネットワークの手数料は約$1。USDTは米ドル連動のステーブルコインです：9.9 USDT ≈ $9.9。ブロックチェーン上で支払いを確認した後、サーバーがコードを自動的に即時発行します。</div></details>
+      <div class="a">即時・国境なし・銀行不要で、TRONネットワークの手数料は約$1。USDTは米ドル連動のステーブルコインです：9.9 USDT ≈ $9.9。ブロックチェーン上で支払いを確認した後、サーバーがコードを自動的に即時発行します。 初心者向けガイド：<a href="/blog/en-usdt.html">5分でUSDTを購入</a>。</div></details>
     <details><summary>本当に機能しますか？怪しい「検出アプリ」と何が違う？</summary>
       <div class="a">正当な疑問です——多くの「検出アプリ」はゴミです。これは正直な物理学です：セキュリティ専門家が推奨する「懐中電灯トリック」を自動化（パルスフラッシュ＋同期フィルタリング）し、さらに熱画像解析を組み合わせています。支払い前に無料で検証でき、限界も率直に明記しています。</div></details>
     <details><summary>正直な限界は？</summary>
@@ -252,11 +254,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = 'TRONブロックチェーンで取引を確認しています…';
   try {
-    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ 支払い確認完了！あなたのコード：' + j.code + ' ——アプリのPROエリアに入力してください。';
+      m.textContent = '✓ 支払い確認完了！あなたのコード：' + j.code + ' ——アプリのPROエリアに入力してください。\n' +
+        '🎯 あなたの紹介コード：' + (j.referral || '—') + ' — 友人は9.9の代わりに7.9支払い、あなたはPROギフトコードを獲得します。' +
+        (j.gift ? '\n🎁 招待してくれた友人へのギフトコード：' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {

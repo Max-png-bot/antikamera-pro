@@ -37,8 +37,10 @@ const WALLET = process.env.WALLET || 'TBA8d1eLJhLVKGjQfeDcxvEJTmrq7Nzrc9';
 const PRICE = +(process.env.PRICE || 9.9);
 const PROMO_PRICE = 6.9;   // стартовая цена для первых покупателей
 const PROMO_FIRST = 10;    // сколько продаж по промо-цене
-function minAcceptedAmount() {
-  return loadJson(F.sales, []).length < PROMO_FIRST ? PROMO_PRICE : PRICE;
+const REFERRAL_PRICE = 7.9; // цена по коду друга (после промо)
+function minAcceptedAmount(refValid) {
+  if (loadJson(F.sales, []).length < PROMO_FIRST) return PROMO_PRICE;
+  return refValid ? REFERRAL_PRICE : PRICE;
 }
 const TRONGRID_KEY = process.env.TRONGRID_KEY || '';
 const USDT_TRC20 = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t'; // контракт USDT в TRON
@@ -51,6 +53,7 @@ const F = {
   alerts: path.join(DIR, 'alerts.json'),
   visits: path.join(DIR, 'visits.json'),
   inbox: path.join(DIR, 'tg_inbox.json'),
+  refs: path.join(DIR, 'referrals.json'),
 };
 fs.mkdirSync(DIR, { recursive: true });
 
@@ -77,6 +80,31 @@ function mintCode(rng) {
 function formatCode(c) {
   c = String(c).toUpperCase().replace(/[^A-Z2-9]/g, '');
   return `${c.slice(0, 3)}-${c.slice(3, 7)}-${c.slice(7, 11)}-${c.slice(11, 15)}`;
+}
+/* ---------- реферальные коды (v13): друг платит меньше, пригласивший — подарок ---------- */
+function mintReferralCode() {
+  for (;;) {
+    let c = 'AKR';
+    for (let i = 0; i < 8; i++) c += LALPH[crypto.randomInt(32)];
+    if (!loadJson(F.refs, []).some(r => r.code === c)) {
+      const refs = loadJson(F.refs, []);
+      refs.push({ code: c, ts: Date.now(), gifts: [] });
+      saveJson(F.refs, refs.slice(-2000));
+      return c;
+    }
+  }
+}
+function findReferral(raw) {
+  const c = String(raw || '').toUpperCase().replace(/[^A-Z2-9]/g, '');
+  if (!c.startsWith('AKR') || c.length !== 11) return null;
+  return loadJson(F.refs, []).find(r => r.code === c) || null;
+}
+function addGiftToReferral(refCode, giftCode) {
+  const refs = loadJson(F.refs, []);
+  const r = refs.find(x => x.code === refCode);
+  if (!r) return;
+  r.gifts.push({ code: giftCode, ts: Date.now() });
+  saveJson(F.refs, refs);
 }
 
 /* ---------- хранилище (JSON-файлы) ---------- */
@@ -137,7 +165,7 @@ async function fetchTransfers(fetchImpl, maxPages = 3) {
  * Причины: bad_hash, not_found, below_price, wrong_recipient,
  *           wrong_token, already_used, api_busy.
  */
-async function verifyPayment(hash, fetchImpl) {
+async function verifyPayment(hash, fetchImpl, ref) {
   if (!/^[0-9a-f]{64}$/i.test(String(hash || ''))) return { ok: false, reason: 'bad_hash' };
   const h = String(hash).toLowerCase();
   const redeemed = loadJson(F.redeemed, []);
@@ -156,7 +184,9 @@ async function verifyPayment(hash, fetchImpl) {
   const tokenAddr = String((tx.token_info && tx.token_info.address) || '');
   if (symbol !== 'USDT' && tokenAddr !== USDT_TRC20) return { ok: false, reason: 'wrong_token' };
   const amount = parseInt(tx.value || '0', 10) / 1e6;
-  const need = minAcceptedAmount();
+  const refEntry = ref ? findReferral(ref) : null;
+  const refValid = !!refEntry;
+  const need = minAcceptedAmount(refValid);
   if (!(amount >= need - 0.001)) return { ok: false, reason: 'below_price', amount };
 
   // AML-скрининг отправителя ДО выдачи кода (v4)
@@ -179,8 +209,17 @@ async function verifyPayment(hash, fetchImpl) {
   const sales = loadJson(F.sales, []);
   sales.push({ ts: Date.now(), hash: h, from: tx.from || '', amount, code, source });
   saveJson(F.sales, sales.slice(-2000));
-  alertSales(`ПРОДАЖА! ${amount} USDT (tx ${h.slice(0, 10)}…) — код ${code} выдан автоматически. Продаж за всё время: ${sales.length}, выручка: ${sales.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT`);
-  return { ok: true, code, amount };
+  const referral = mintReferralCode();   // личный код друга для покупателя
+  const result = { ok: true, code, amount, referral };
+  if (refValid) {
+    const gift = mintCode(n => crypto.randomInt(n));  // подарок тому, кто пригласил
+    addGiftToReferral(refEntry.code, gift);
+    result.gift = gift;
+    alertSales(`ПРОДАЖА! ${amount} USDT (tx ${h.slice(0, 10)}…) — код ${code} выдан. ПО КОНЦЕ ПРИЯТЕЛЯ (${refEntry.code}): подарочный код ${gift} — покажите его покупателю, чтобы он передал пригласившему. Продаж: ${sales.length}`);
+    return result;
+  }
+  alertSales(`ПРОДАЖА! ${amount} USDT (tx ${h.slice(0, 10)}…) — код ${code} выдан автоматически. Реферальный код покупателя: ${referral}. Продаж за всё время: ${sales.length}, выручка: ${sales.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1)} USDT`);
+  return result;
 }
 
 /* ---------- отзывы ---------- */
@@ -211,7 +250,7 @@ function feedbackStats() {
 /* ---------- статика ---------- */
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8', '.png': 'image/png',
+  '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.gif': 'image/gif',
   '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml',
 };
 function serveStatic(req, res, pathname) {
@@ -754,7 +793,7 @@ function start() {
     /* API */
     if (u.pathname === '/api/verify') {
       if (rateLimited(ip)) return json(res, 429, { ok: false, reason: 'rate_limited' });
-      const r = await verifyPayment(u.searchParams.get('hash') || '');
+      const r = await verifyPayment(u.searchParams.get('hash') || '', null, u.searchParams.get('ref') || '');
       return json(res, r.ok ? 200 : 200, r);
     }
 
@@ -837,6 +876,7 @@ function start() {
       return json(res, 200, {
         price: PRICE,
         promoPrice: PROMO_PRICE,
+        referralPrice: REFERRAL_PRICE,
         promoLeft: Math.max(0, PROMO_FIRST - sales.length),
         visits: visits24(),
         count: fb.length,

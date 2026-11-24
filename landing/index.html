@@ -180,7 +180,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">Получить код</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="Код друга (если вас пригласили — необязательно)" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ Перепроверьте адрес вручную после вставки (первые «TBA8d1e…» и последние «…q7Nzrc9»). Перевод не на тот адрес или не в сети TRC20 невозможно отменить. Перед крупной покупкой можно сделать тестовый перевод.</div>
       </div>
@@ -214,7 +216,7 @@
     <details><summary>Почему оплата криптовалютой?</summary>
       <div class="a">Мгновенно, без банка и границ, низкая комиссия сети TRON (~1 $). USDT — стейблкоин, привязан к доллару: 9.9 USDT = 9.9 $.</div></details>
     <details><summary>Я не разбираюсь в крипте. Это сложно?</summary>
-      <div class="a">Нет: установите любой кошелёк с поддержкой TRON (например, Trust Wallet или Tonkeeper с USDT), купите 10 USDT, отсканируйте QR-код с этой страницы и отправьте. Дальше пришлите хэш — и получите код.</div></details>
+      <div class="a">Нет: установите любой кошелёк с поддержкой TRON (например, Trust Wallet или Tonkeeper с USDT), купите 10 USDT, отсканируйте QR-код с этой страницы и отправьте. Дальше пришлите хэш — и получите код. Пошаговый гайд для новичков: <a href="/blog/ru-usdt.html">«Как купить USDT за 5 минут»</a>.</div></details>
     <details><summary>На скольких устройствах работает один код?</summary>
       <div class="a">Код активирует все ваши личные устройства (телефон + планшет). Массовое использование одного кода блокируется проверкой уникальности при обновлениях.</div></details>
     <details><summary>Это законно?</summary>
@@ -260,12 +262,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = 'Проверяю транзакцию в блокчейне TRON…';
   try {
-    var r = await fetch('/api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('/api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ Оплата подтверждена! Ваш код: ' + j.code +
-        ' — введите его в приложении (раздел PRO → «Активировать»).';
+      m.textContent = '✓ Оплата подтверждена! Ваш код: ' + j.code + ' — введите его в приложении (раздел PRO → «Активировать»).\n' +
+        '🎯 Ваш код друга: ' + (j.referral || '—') + ' — друг заплатит 7.9 вместо 9.9, а вы получите подарочный код PRO.' +
+        (j.gift ? '\n🎁 Подарочный код для того, кто вас пригласил: ' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {

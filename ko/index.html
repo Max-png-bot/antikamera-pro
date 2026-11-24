@@ -175,7 +175,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">코드 받기</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="친구 추천 코드 (초대받았다면 - 선택)" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ 붙여넣은 후 주소를 눈으로 다시 확인하세요(「TBA8d1e…」로 시작, 「…q7Nzrc9」로 끝남). 잘못된 주소나 네트워크로 보낸 금액은 복구할 수 없습니다.</div>
       </div>
@@ -201,7 +203,7 @@
   <div class="faq">
     <h2 class="sec">자주 묻는 질문</h2>
     <details><summary>왜 암호화폐 결제인가요?</summary>
-      <div class="a">즉시 입금, 국경 제한 없음, 은행 불필요, TRON 네트워크 수수료 약 $1. USDT는 달러와 연동된 스테이블코인입니다: 9.9 USDT ≈ $9.9. 서버가 블록체인에서 결제를 확인한 뒤 코드를 자동으로 즉시 발급합니다.</div></details>
+      <div class="a">즉시 입금, 국경 제한 없음, 은행 불필요, TRON 네트워크 수수료 약 $1. USDT는 달러와 연동된 스테이블코인입니다: 9.9 USDT ≈ $9.9. 서버가 블록체인에서 결제를 확인한 뒤 코드를 자동으로 즉시 발급합니다. 입문 가이드: <a href="/blog/en-usdt.html">5분 안에 USDT 구매</a>.</div></details>
     <details><summary>정말 작동하나요? 가짜 탐지 앱과 뭐가 다르죠?</summary>
       <div class="a">정당한 질문입니다 — 대부분의 '탐지' 앱은 쓰레기입니다. 이 앱은 정직한 물리학입니다: 보안 전문가들이 추천하는 '손전등 요령'을 자동화(펄스 플래시 + 동기화 필터링)하고, 열화상 분석까지 더했습니다. 결제 전에 무료로 검증할 수 있고 한계도 솔직하게 밝힙니다.</div></details>
     <details><summary>솔직한 한계는 무엇인가요?</summary>
@@ -252,11 +254,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = 'TRON 블록체인에서 거래를 확인하는 중…';
   try {
-    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ 결제 확인 완료! 코드: ' + j.code + ' — 앱의 PRO 영역에 입력하세요.';
+      m.textContent = '✓ 결제 확인 완료! 코드: ' + j.code + ' — 앱의 PRO 영역에 입력하세요.\n' +
+        '🎯 당신의 추천 코드: ' + (j.referral || '—') + ' — 친구는 9.9 대신 7.9를 결제하고 당신은 PRO 선물 코드를 받습니다.' +
+        (j.gift ? '\n🎁 당신을 초대한 친구에게 줄 선물 코드: ' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {

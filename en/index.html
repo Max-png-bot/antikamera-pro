@@ -175,7 +175,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">Get code</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="Friend's referral code (if you were invited — optional)" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ After pasting, double-check the address by eye (starts with “TBA8d1e…”, ends with “…q7Nzrc9”). Funds sent to a wrong address or on a wrong network cannot be recovered.</div>
       </div>
@@ -201,7 +203,7 @@
   <div class="faq">
     <h2 class="sec">FAQ</h2>
     <details><summary>Why crypto payment?</summary>
-      <div class="a">Instant, borderless, no bank involvement, low TRON network fee (~$1). USDT is a dollar-pegged stablecoin: 9.9 USDT ≈ $9.9.</div></details>
+      <div class="a">Instant, borderless, no bank involvement, low TRON network fee (~$1). USDT is a dollar-pegged stablecoin: 9.9 USDT ≈ $9.9. Step-by-step for first-timers: <a href="/blog/en-usdt.html">How to buy USDT in 5 minutes</a>.</div></details>
     <details><summary>Does it really work, or is it another scam detector app?</summary>
       <div class="a">Fair question — most "detector" apps are junk. This one is honest physics: the same flashlight method security experts recommend, automated (pulsed flash + sync filtering), plus optional thermal video analysis. It's free to verify before you pay anything. And it states its limits openly (see below).</div></details>
     <details><summary>What are the honest limits?</summary>
@@ -250,11 +252,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = 'Checking the transaction on the TRON blockchain…';
   try {
-    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ Payment confirmed! Your code: ' + j.code + ' — enter it in the app (PRO section).';
+      m.textContent = '✓ Payment confirmed! Your code: ' + j.code + ' — enter it in the app (PRO section).\n' +
+        '🎯 Your referral code: ' + (j.referral || '—') + ' — a friend pays 7.9 instead of 9.9, and you get a bonus PRO code.' +
+        (j.gift ? '\n🎁 Gift code for the friend who invited you: ' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {

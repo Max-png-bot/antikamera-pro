@@ -175,7 +175,9 @@
               style="flex:1;min-width:170px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:14px">
             <button class="copy" id="btnVerify">Receber código</button>
           </div>
-          <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
+          <input id="refCode" placeholder="Código de indicação (se te convidaram — opcional)" autocomplete="off"
+              style="width:100%;margin-top:8px;background:#182029;color:#e8eef5;border:1px solid #26313f;border-radius:8px;padding:10px;font-family:inherit;font-size:13px">
+            <div id="vmsg" style="font-size:13px;margin-top:6px;min-height:18px"></div>
         </div>
         <div class="warn">⚠️ Após colar, confira o endereço a olho (começa com «TBA8d1e…», termina em «…q7Nzrc9»). Fundos enviados para um endereço ou rede errados não podem ser recuperados.</div>
       </div>
@@ -201,7 +203,7 @@
   <div class="faq">
     <h2 class="sec">Perguntas frequentes</h2>
     <details><summary>Por que pagamento com cripto?</summary>
-      <div class="a">Instantâneo, sem fronteiras, sem banco no caminho, e a taxa da rede TRON é baixa (~$1). USDT é uma stablecoin atrelada ao dólar: 9.9 USDT ≈ US$9.9. O servidor verifica o pagamento na blockchain e emite o código automaticamente na hora.</div></details>
+      <div class="a">Instantâneo, sem fronteiras, sem banco no caminho, e a taxa da rede TRON é baixa (~$1). USDT é uma stablecoin atrelada ao dólar: 9.9 USDT ≈ US$9.9. O servidor verifica o pagamento na blockchain e emite o código automaticamente na hora. Guia passo a passo: <a href="/blog/en-usdt.html">como comprar USDT em 5 minutos</a>.</div></details>
     <details><summary>Funciona de verdade ou é outro app-enganação?</summary>
       <div class="a">Pergunta justa — a maioria dos apps «detectores» é lixo. Este é física honesta: o mesmo truque da lanterna que especialistas em segurança recomendam, automatizado (flash pulsante + filtragem por sincronia), mais análise de vídeo térmico. Dá para testar grátis antes de pagar, e ele declara abertamente os limites (abaixo).</div></details>
     <details><summary>Quais são os limites honestos?</summary>
@@ -250,11 +252,15 @@ document.getElementById('btnVerify').onclick = async function () {
   m.style.color = '#93a3b5';
   m.textContent = 'Verificando a transação na blockchain TRON…';
   try {
-    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h));
+    var rc = document.getElementById('refCode');
+    var refq = rc && rc.value.trim() ? '&ref=' + encodeURIComponent(rc.value.trim()) : '';
+    var r = await fetch('../api/verify?hash=' + encodeURIComponent(h) + refq);
     var j = await r.json();
     if (j.ok) {
       m.style.color = '#38d16a';
-      m.textContent = '✓ Pagamento confirmado! Seu código: ' + j.code + ' — digite no app (seção PRO).';
+      m.textContent = '✓ Pagamento confirmado! Seu código: ' + j.code + ' — digite no app (seção PRO).\n' +
+        '🎯 Seu código de indicação: ' + (j.referral || '—') + ' — seu amigo paga 7.9 em vez de 9.9, e você ganha um código PRO de presente.' +
+        (j.gift ? '\n🎁 Código de presente para quem te convidou: ' + j.gift : '');
     } else {
       m.style.color = '#ff8080';
       var map = {
