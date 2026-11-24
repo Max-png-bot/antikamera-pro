@@ -1,0 +1,11 @@
+{
+ "TBA8D1ELJHLVKGJQFEDCXVEJTMRQ7NZRC9": {
+  "ts": 1795458222180,
+  "result": {
+   "level": "LOW",
+   "action": "issue",
+   "reason": "clean",
+   "detail": "score 0"
+  }
+ }
+}
