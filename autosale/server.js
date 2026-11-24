@@ -328,21 +328,24 @@ async function redditWatchTick() {
     };
     walk((j[1] && j[1].data && j[1].data.children) || []);
     for (const f of fresh) seen.add(f.id);
+    // старые значения — ДО обновления
+    const prevRemoved = st.removed;
+    const prevScore = st.score;
+    // новые значения
+    const removed = !!(post.banned_by || (post.removed_by_category && post.removed_by_category !== 'moderator_ignored' && post.removed_by_category !== 'author'));
     st.seenIds = [...seen].slice(-300);
     st.num_comments = post.num_comments;
     st.score = post.score;
-    st.ts = Date.now();
-    saveJson(stateF, st);
-    const removed = !!(post.banned_by || (post.removed_by_category && post.removed_by_category !== 'moderator_ignored' && post.removed_by_category !== 'author'));
-    const statusChanged = st.removed === undefined ? removed !== false : st.removed !== removed;
     st.removed = removed;
-    if (statusChanged) {
+    st.ts = Date.now();
+    saveJson(stateF, st);   // сохраняем ПОСЛЕ всех изменений
+    if (prevRemoved !== undefined && prevRemoved !== removed) {
       notify(removed
-        ? '🔔 АнтиКамера PRO: ⚠️ Reddit-пост СНОВA скрыт/удалён — план в marketing/reddit_recovery.md'
+        ? '🔔 АнтиКамера PRO: ⚠️ Reddit-пост снова скрыт/удалён — план в marketing/reddit_recovery.md'
         : '🔔 АнтиКамера PRO: ✅ Reddit-пост ВИДЕН в ленте (фильтр снят) — трафик пошёл!');
     }
-    if (st.score !== undefined && post.score > st.score) {
-      notify('🔔 АнтиКамера PRO: 🔺 Reddit-пост: ' + post.score + ' апвоутов (+' + (post.score - st.score) + ')');
+    if (prevScore !== undefined && post.score > prevScore) {
+      notify('🔔 АнтиКамера PRO: 🔺 Reddit-пост: ' + post.score + ' апвоутов (+' + (post.score - prevScore) + ')');
     }
     if (fresh.length) {
       let txt = `💬 Reddit-пост: ${fresh.length} новых комментариев (апвоутов: ${post.score})\n`;
