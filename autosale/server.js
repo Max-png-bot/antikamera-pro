@@ -50,6 +50,7 @@ const F = {
   feedback: path.join(DIR, 'feedback.json'),
   alerts: path.join(DIR, 'alerts.json'),
   visits: path.join(DIR, 'visits.json'),
+  inbox: path.join(DIR, 'tg_inbox.json'),
 };
 fs.mkdirSync(DIR, { recursive: true });
 
@@ -546,6 +547,134 @@ function releaseAmlHold(hash) {
   return { code, amount: h.amount };
 }
 
+/* ---------- Telegram-интерфейс владельца (v11): команды 24/7 + входящие ---------- */
+const TG_HOOK_SECRET = process.env.ALERT_TELEGRAM_TOKEN || '';
+
+function tgSend(text) {
+  const token = process.env.ALERT_TELEGRAM_TOKEN;
+  const chat = process.env.ALERT_TELEGRAM_CHAT_ID;
+  if (!token || !chat) return Promise.resolve(false);
+  return fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chat, text: String(text).slice(0, 4000) }),
+  }).then(r => r.ok).catch(() => false);
+}
+
+async function telegramCommandReply(raw) {
+  const t = String(raw || '').trim();
+  const low = t.toLowerCase();
+  const sales = loadJson(F.sales, []);
+  const revenue = sales.reduce((s, x) => s + (+x.amount || 0), 0).toFixed(1);
+  const vis = visits24();
+  const promoLeft = Math.max(0, PROMO_FIRST - sales.length);
+  if (low === '/help' || low === 'help' || low === 'помощь') {
+    return ['🤖 АнтиКамера PRO — команды (работают 24/7):',
+      '/status — продажи, выручка, визиты, промо',
+      '/stats — детали: склад кодов, отзывы, AML',
+      '/digest — полный ежедневный отчёт прямо сейчас',
+      '/price — цена и промо-остаток · /visits — визиты по языкам',
+      '/tasks — задачи, записанные для агента',
+      '/feedback — последние отзывы',
+      '/aml T… — проверить адрес отправителя (AML)',
+      '/release хэш — выдать код по AML-холду вручную',
+      '/block T… — добавить адрес в блок-лист',
+      '/ping — проверить, что бот жив',
+      '',
+      'Любой другой текст — записываю как ЗАДАЧУ для агента:',
+      'агент увидит её при следующем сеансе и ответит сюда же.'].join('\n');
+  }
+  if (low === '/ping' || low === 'тест' || low === '/test') {
+    return '🏓 pong — бот на связи · сервер жив (uptime ' + Math.round(process.uptime() / 60) + ' мин)';
+  }
+  if (low === '/status' || low === 'статус' || low.startsWith('продажи')) {
+    return ['📊 Статус · ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',
+      'Продаж: ' + sales.length + ' · выручка: ' + revenue + ' USDT' +
+        (promoLeft ? ' · промо ' + PROMO_PRICE + ' осталось: ' + promoLeft : ''),
+      'Визиты (48 ч): app ' + vis.app + ' · RU ' + vis.ru + ' · EN ' + vis.en + ' · ZH ' + vis.zh +
+        ' · JA ' + vis.ja + ' · KO ' + vis.ko + ' · ES ' + vis.es + ' · PT ' + vis.pt + ' · блог ' + vis.blog,
+      'Сервер: uptime ' + Math.round(process.uptime() / 60) + ' мин'].join('\n');
+  }
+  if (low === '/stats' || low === 'статистика') {
+    let stock = 0;
+    try { stock = fs.readFileSync(F.stock, 'utf8').split('\n').filter(l => l.includes('| не продан')).length; } catch (_) {}
+    const fb = feedbackStats();
+    const holds = loadJson(AML.holds, []).filter(h => !h.released).length;
+    return ['📈 Детали:',
+      'Кодов на складе: ' + stock,
+      'Отзывы: ' + fb.count + ' (средняя ' + (fb.avg || '—') + ')' +
+        (fb.topIssues.length ? ' · топ проблем: ' + fb.topIssues.map(i => i.word).join(', ') : ''),
+      'AML: холдов в ожидании ' + holds + ' · всего отклонено ' + loadJson(AML.holds, []).length,
+      'Всего продаж: ' + sales.length + ' на ' + revenue + ' USDT'].join('\n');
+  }
+  if (low === '/digest' || low === 'отчёт' || low === 'отчет') {
+    return await dailyDigestText();
+  }
+  if (low === '/price' || low === 'цена') {
+    return promoLeft
+      ? '💰 Цена: ' + PRICE + ' USDT · ПРОМО ' + PROMO_PRICE + ' USDT для первых ' + PROMO_FIRST + ' (осталось ' + promoLeft + ')'
+      : '💰 Цена: ' + PRICE + ' USDT (промо завершено)';
+  }
+  if (low === '/visits' || low === 'визиты') {
+    return '👁 Визиты за 48 ч:\napp ' + vis.app + ' · RU ' + vis.ru + ' · EN ' + vis.en + ' · ZH ' + vis.zh +
+      ' · JA ' + vis.ja + ' · KO ' + vis.ko + ' · ES ' + vis.es + ' · PT ' + vis.pt + ' · блог ' + vis.blog;
+  }
+  if (low === '/tasks' || low === 'задачи') {
+    const list = loadJson(F.inbox, []);
+    if (!list.length) return '📭 Задач для агента нет. Напишите любой текст — запишу.';
+    return '📥 Задач для агента: ' + list.length + '\n' + list.slice(-10).map((x, i) =>
+      (i + 1) + '. ' + new Date(x.ts).toISOString().slice(5, 16).replace('T', ' ') + ' — ' + String(x.text).slice(0, 120)).join('\n');
+  }
+  if (low === '/feedback' || low.startsWith('отзыв')) {
+    const fb = loadJson(F.feedback, []).slice(-5).reverse();
+    if (!fb.length) return 'Отзывов пока нет.';
+    return '💬 Последние отзывы:\n' + fb.map(x => '★' + x.rating + ' — ' + String(x.text || '').slice(0, 120)).join('\n');
+  }
+  if (low.startsWith('/aml ')) {
+    const addr = t.slice(5).trim();
+    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return 'Формат адреса неверный (нужен TRON-адрес вида T…).';
+    const v = await screenAddress(addr);
+    return '🔎 AML ' + addr + ':\nуровень ' + v.level + ' · решение ' + v.action + '\n' + v.detail;
+  }
+  if (low.startsWith('/release ')) {
+    const h = t.slice(9).trim().toLowerCase();
+    const r = releaseAmlHold(h);
+    if (!r) return 'Холд не найден или уже закрыт.';
+    alertSales('AML: код выдан по команде из Telegram');
+    return '✅ Код выдан: ' + r.code + ' (оплата ' + r.amount + ' USDT)';
+  }
+  if (low.startsWith('/block ')) {
+    const addr = t.slice(7).trim();
+    if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) return 'Формат адреса неверный.';
+    fs.appendFileSync(AML.blocklist, addr + ' | командой из Telegram | ' + new Date().toISOString().slice(0, 10) + '\n');
+    return '⛔ Адрес добавлен в блок-лист: ' + addr;
+  }
+  // всё остальное — входящая задача для агента
+  const inbox = loadJson(F.inbox, []);
+  inbox.push({ ts: Date.now(), text: t.slice(0, 1000) });
+  saveJson(F.inbox, inbox.slice(-200));
+  return '📩 Записал как задачу (в очереди ' + inbox.length + '). Агент ответит при следующем сеансе — ответ придёт сюда.\nМгновенно: /status, /digest, /help';
+}
+
+async function handleTelegramUpdate(upd) {
+  try {
+    const msg = upd && upd.message;
+    if (!msg || !msg.text) return true;
+    const chat = msg.chat && String(msg.chat.id);
+    const myChat = process.env.ALERT_TELEGRAM_CHAT_ID;
+    if (!myChat || chat !== String(myChat)) return true;  // отвечаем только владельцу
+    const stF = path.join(DIR, 'tg_state.json');
+    const st = loadJson(stF, {});
+    if (upd.update_id !== undefined) {
+      if (upd.update_id <= (st.lastUpdateId || 0)) return true;  // защита от повторов
+      st.lastUpdateId = upd.update_id;
+      saveJson(stF, st);
+    }
+    const reply = await telegramCommandReply(msg.text);
+    if (reply) await tgSend(reply);
+    return true;
+  } catch (_) { return true; }
+}
+
 /* ---------- панель админа ---------- */
 const ADMIN_HTML = `<!DOCTYPE html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -754,6 +883,26 @@ function start() {
     if (u.pathname === '/admin') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(ADMIN_HTML);
+    }
+
+    /* Telegram-интерфейс владельца (v11): webhook + входящие для агента */
+    if (TG_HOOK_SECRET && u.pathname === '/api/telegram/hook/' + TG_HOOK_SECRET && req.method === 'POST') {
+      const goodSecret = req.headers['x-telegram-bot-api-secret-token'] === TG_HOOK_SECRET.replace(/:/g, '');
+      let body = '';
+      for await (const chunk of req) { body += chunk; if (body.length > 65536) break; }
+      if (!goodSecret) { res.writeHead(403); return res.end('forbidden'); }
+      try { await handleTelegramUpdate(JSON.parse(body)); } catch (_) {}
+      return json(res, 200, { ok: true });
+    }
+    if (u.pathname === '/api/tg-inbox') {
+      if (u.searchParams.get('key') !== TG_HOOK_SECRET) return json(res, 403, { error: 'bad key' });
+      const list = loadJson(F.inbox, []);
+      return json(res, 200, { pending: list.length, list });
+    }
+    if (u.pathname === '/api/tg-inbox/clear' && req.method === 'POST') {
+      if (u.searchParams.get('key') !== TG_HOOK_SECRET) return json(res, 403, { error: 'bad key' });
+      saveJson(F.inbox, []);
+      return json(res, 200, { ok: true, cleared: true });
     }
 
     /* статика */

@@ -204,3 +204,18 @@ https://antikamera-pro.onrender.com/landing/
   hreflang-матрица связывает все 8 страниц (RU/EN/ZH/JA/KO/ES/PT + x-default);
 - **Сервер**: маршруты /es/ /pt/, визиты es/pt в summary и дайджесте;
 - Telegraph: статьи ES и PT опубликованы анонимно.
+
+## v11: Telegram-бот стал двусторонним (в проде 24.11.2026)
+
+Владелец может писать боту задачи — бот отвечает и исполняет:
+- **Мгновенные команды 24/7** (без ИИ, сам сервер): /help /ping /status /stats
+  /digest /price /visits /tasks /feedback /aml T… /release хэш /block T…
+  (+ русские слова-синонимы: «статус», «отчёт», «задачи»…);
+- **Свободный текст → входящие задачи**: сохраняются в tg_inbox.json; агент
+  забирает их через GET /api/tg-inbox?key=<bot-token> при каждом сеансе и
+  отвечает владельцу в Telegram;
+- **Webhook**: POST /api/telegram/hook/<token> (секрет в URL + заголовок
+  X-Telegram-Bot-Api-Secret-Token = токен без двоеточия); обновления только
+  от chat_id владельца, дедупликация по update_id;
+- Команды /release и /block — полноценное управление AML с телефона;
+  /digest — полный отчёт по требованию.
