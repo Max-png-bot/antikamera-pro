@@ -1,5 +1,5 @@
 /* АнтиКамера PRO — service worker v2: офлайн-кэш + свежие обновления */
-const CACHE = 'antikamera-pro-v20';
+const CACHE = 'antikamera-pro-v21';
 const ASSETS = [
   './',
   './index.html',
