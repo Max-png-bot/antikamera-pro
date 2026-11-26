@@ -80,6 +80,10 @@
   .stage .topbar .torchind.tor{color:#fbbf24;max-width:26%}
 
   .row{display:flex;gap:8px;margin-top:10px}
+  @media (max-width:430px){  /* v48: узкие экраны — кнопки не обрезаются */
+    .row{gap:5px}
+    .row button{font-size:12.5px;padding:9px 4px;white-space:normal;line-height:1.15;min-height:42px}
+  }
   button{flex:1;border:1px solid var(--line);background:var(--card);color:var(--tx);
     padding:12px 10px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer}
   button:active{transform:translateY(1px)}
@@ -521,6 +525,11 @@ const G = (function () {
   const mask = new Uint8Array(PROC_W * PROC_H);
   const visited = new Uint8Array(PROC_W * PROC_H);
   const stack = new Int32Array(PROC_W * PROC_H);
+  function edgeOK(cx, cy) {  /* v48: мёртвая зона краёв матрицы (руководство владельца:
+     краевые засветы/виньетирование у x≈0 давали красную рамку, прилипшую к левому
+     краю). X: 12..180, Y: 10..134 (≈6–7%). */
+    return cx >= 12 && cx <= PROC_W - 12 && cy >= 10 && cy <= PROC_H - 10;
+  }
   function detectBlobs(img, phaseOn) {
     const d = img.data, W = PROC_W, H = PROC_H,
           th = S.evDim ? 150 : ((S.boost || 0) >= 4 ? 150 : Math.max(205, S.threshold - (S.boost || 0) * 8));
@@ -575,6 +584,7 @@ const G = (function () {
       const bw = maxX - minX + 1, bh = maxY - minY + 1;
       const fill = area / (bw * bh), asp = bw / bh;
       if (fill < 0.45 || asp < 0.3 || asp > 3.4) continue;
+      if (!edgeOK(sx / area, sy / area)) continue;  /* v48: край — не кандидат */
       blobs.push({ cx: sx / area, cy: sy / area, w: bw, h: bh, mean: sb / area / 3, area, pk,
         circ: area >= 16 ? 4 * Math.PI * area / (per * per) : 1 });  /* v39: округлённость, C=4πA/P²; линза ≈0.75–1, вытянутый блик <0.65 */
     }
@@ -603,7 +613,7 @@ const G = (function () {
         }
         const bw2 = maxX2 - minX2 + 1, bh2 = maxY2 - minY2 + 1;
         if (area2 < 2 || area2 > 40 || bw2 > 6 || bh2 > 6) continue;
-        blobs.push({ cx: sx2 / area2, cy: sy2 / area2, w: bw2, h: bh2, mean: 250, area: area2, pk: 255 });
+        if (edgeOK(sx2 / area2, sy2 / area2)) blobs.push({ cx: sx2 / area2, cy: sy2 / area2, w: bw2, h: bh2, mean: 250, area: area2, pk: 255 });  /* v48 */
       }
     }
     return blobs;
@@ -1003,6 +1013,7 @@ const G = (function () {
         let dup = false;
         for (const b of blobs) if (Math.abs(b.cx - pcx) <= 2 && Math.abs(b.cy - pcy) <= 2) { dup = true; break; }
         if (dup) continue;
+        if (!edgeOK(pcx, pcy)) continue;  /* v48: край — не кандидат (нат-ядра) */
         blobs.push({ cx: pcx, cy: pcy, w: Math.max(1, bw * PROC_W / W), h: Math.max(1, bh * PROC_H / H),
           mean: 240, area: area, pk: pk, contr: contr, nat: true });
       }
@@ -1076,6 +1087,7 @@ const G = (function () {
       let dup = false;
       for (const b of blobs) if (Math.abs(b.cx - pcx) <= 2 && Math.abs(b.cy - pcy) <= 2) { dup = true; break; }
       if (dup) continue;
+      if (!edgeOK(pcx, pcy)) return;  /* v48: край — не кандидат (тёмные острова) */
       blobs.push({ cx: pcx, cy: pcy, w: Math.max(1, (nx1 - nx0) * PROC_W / W), h: Math.max(1, (ny1 - ny0) * PROC_H / H),
         mean: 240, area: area, pk: 255, contr: Math.max(contr, 2.5), nat: true, isl: true });
     }
@@ -1731,7 +1743,7 @@ const G = (function () {
       const av = sc2 ? sm2 / sc2 : 0;
       if (phaseOn) S.lumaOn = S.lumaOn == null ? av : S.lumaOn * .9 + av * .1;
       else S.lumaOff = S.lumaOff == null ? av : S.lumaOff * .9 + av * .1;
-      if (phaseOn && S.lumaOff != null && av < S.lumaOff + 3) {  /* v44: без гейта blobs — шумовые блобы не глушат детектор мёртвой вспышки */
+      if (phaseOn && S.lumaOff != null && blobs.length === 0 && av < S.lumaOff + 3) {  /* v44/v48: гейт возвращён — синхронные кандидаты уже доказывают вспышку; пустой кадр + нет светления = LED мёртв */
         S.noLuma = (S.noLuma || 0) + 1;
         if (S.noLuma >= 40 && ts - (S.lumaChk || 0) > 10000) {
           S.lumaChk = ts; S.noLuma = 0;
@@ -2365,7 +2377,7 @@ const App = (function () {
 
   /* ---- Service Worker (офлайн) ---- */
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(r => r.update && r.update()).catch(() => {});  /* v48: проверка обновы при открытии */
   }
 
   /* ---- PRO: активация кодом ---- */
