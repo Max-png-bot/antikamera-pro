@@ -512,7 +512,7 @@ const G = (function () {
   const hctx = hcv.getContext('2d', { willReadFrequently: true });
 
   const S = { running: false, demo: false, mode: 'blink', torch: false, torchOK: false,
-    graceUntil: 0, threshold: 233, showCand: true, blinkTimer: null, lastProc: 0, nextId: 1,
+    graceUntil: 0, threshold: 225, showCand: true, blinkTimer: null, lastProc: 0, nextId: 1,  /* v49: 233→225 (юзер-патч №3: линза ноутбука 215–230 не дотягивала до 233) */
     gmag: 0, stillMs: 0, lastStillTs: 0,
     scanOn: false, travel: 0, dispX: 0, dispY: 0, scanT0: 0, scanClean: false,
     pcurArr: [], netMo: 0, pd: 0, pdy: 0, grid: false, irChk: 0, boost: 0, noBlob: 0, zoom: 1,
@@ -641,15 +641,25 @@ const G = (function () {
     const R = 11, used = new Set();
     const pairs = [];
     for (const b of blobs) {
+      /* v49 (юзер-патч №2, «блокировка при движении»): матч в КООРДИНАТАХ СЦЕНЫ.
+         Сырой матч (t.pcx vs b.cx) рвал трек на каждой OFF-фазе вспышки: за паузу
+         сцена уезжает дальше R=11 при ведении телефона → трек умирал → frames
+         обнулялись → красный не набирался НИКОГДА при движении («задерживайтесь
+         на точке 2–3 с»). Сценовая координата = позиция + S.pcur (pcur — координата
+         СТЕНЫ, инверсна кадровой, см. v26b) стабильна для блика на стене —
+         трек живёт через паузы вспышки. */
+      const scx = b.cx + (S.pcur || 0), scy = b.cy + (S.pcurY || 0);
       let bestId = null, bd = 1e9;
       for (const [id, t] of tracker) {
-        const dd = (t.pcx - b.cx) ** 2 + (t.pcy - b.cy) ** 2;  /* по сырой позиции: EMA отстаёт */
+        const ddx = (t.scx === undefined ? t.pcx - b.cx : t.scx - scx),
+              ddy = (t.scy === undefined ? t.pcy - b.cy : t.scy - scy);
+        const dd = ddx * ddx + ddy * ddy;
         if (dd < bd) { bd = dd; bestId = id; }
       }
       if (bestId !== null && bd <= R * R) pairs.push([bestId, b]);
       else {
         const id = S.nextId++;
-        tracker.set(id, { cx: b.cx, cy: b.cy, pcx: b.cx, pcy: b.cy, w: b.w, h: b.h, mean: b.mean, pk: b.pk || 0,
+        tracker.set(id, { cx: b.cx, cy: b.cy, pcx: b.cx, pcy: b.cy, scx: b.cx + (S.pcur || 0), scy: b.cy + (S.pcurY || 0), w: b.w, h: b.h, mean: b.mean, pk: b.pk || 0,
           pmin: S.pcur, pmax: S.pcur,
           on: phaseOn ? 1 : 0, off: phaseOn ? 0 : 1, hits: 1, miss: 0, last: now, alerted: false,
           rel: 0, frames: 0, mframes: 0, gpk: 0, hisat: b.hisat || 0, contr: b.contr || 0, bmiss: 0, gloss: false });
@@ -664,7 +674,8 @@ const G = (function () {
           gy = (S.pcdx === null || S.pcdx === undefined) ? (S.sok ? S.sdy : 0) : (S.pcdy || 0);  /* v26b: обе оси из корреляции; фолбэк — центроид */
     for (const [id, b] of pairs) {
       const t = tracker.get(id); used.add(id);
-      if (t.miss === 0) t.rel += Math.hypot((b.cx - t.pcx) - gx, (b.cy - t.pcy) - gy);  /* miss>0: за паузу движение неизвестно */
+      if (t.scx !== undefined) { t.scx = b.cx + (S.pcur || 0); t.scy = b.cy + (S.pcurY || 0); }  /* v49: сценовая координата обновлена */
+      if (t.miss === 0 && t.frames > 2) t.rel += Math.hypot((b.cx - t.pcx) - gx, (b.cy - t.pcy) - gy);  /* miss>0: за паузу движение неизвестно; v49: первые 2 кадра трека — gx после смены сцены неустойчив, мусор в rel не копим */
       t.pcx = b.cx; t.pcy = b.cy;
       t.frames++;
       if (S.gmag >= 1.5 || (S.netMo || 0) >= 8 || S.demo) t.mframes++;  /* v24+: кадры с движением; демо — статичная сцена */
@@ -713,7 +724,7 @@ const G = (function () {
        ON-фаз (bmiss) накапливаются. Допуск для реальных линз с мерцанием
        детекции на границе чувствительности. */
     return S.mode === 'blink'
-      ? (t.on >= 6 && t.off <= 1 && t.on + t.off >= 7 && (t.bmiss || 0) <= Math.max(3, t.on * 0.5))
+      ? (t.on >= 3 && t.off <= 1 && t.on + t.off >= 4 && (t.bmiss || 0) <= Math.max(3, t.on * 0.5))  /* v49 (юзер-патч №2): 3 подряд вспышки достаточно — LED/шум отсеивает off>1 + ИИ */
       : (t.hits >= 14 && t.miss < 3);
   }
   function shapeOK(t) { return t.w <= 26 && t.h <= 26; }
@@ -753,7 +764,7 @@ const G = (function () {
     const parThr = 0.45 + 0.35 * t.gpk;
     const mf2 = t.mframes >= 3 ? t.mframes : t.frames;  /* v29: медленный дрейф: кадров «движения» (gmag≥1.5) нет, но rel/frames валидна (сабпиксель) */
     if (syncOK(t) && shapeOK(t) && (S.demo || ((t.pmax || 0) - (t.pmin || 0)) >= 8) &&
-        (t.mframes >= 5 || ((t.arcMin || 14) <= 4 && t.frames >= 12)) &&   /* v29: кластер модуля — длинная жизнь вместо кадров движения */
+        (t.mframes >= 5 || t.frames >= 10 || ((t.arcMin || 14) <= 4 && t.frames >= 12)) &&   /* v29: кластер; v49 (юзер-патч №2): 10 кадров жизни трека = «3 мига» (sync+дуга+ядро+контраст держат остальное) */
         ((t.pmax || 0) - (t.pmin || 0)) >= (t.arcMin || 14) &&
         (motionOK(t) || (coreOK(t) && (t.rel / mf2) <= parThr + 0.35)) && (t.contr || 0) >= 1.8 &&
         ((Math.max(t.w, t.h) < 5) || (t.circ || 1) >= 0.65)) return 2;  /* v39: вытянутый блик (C<0.65) — не линза */  /* v25: без тёмного barrel — не камера; v28: угловая стойкость; v29: кластер — мягче */
@@ -1430,7 +1441,7 @@ const G = (function () {
       octx.fillRect(sx - tw / 2, sy - h / 2 - 26, tw, 17);
       octx.fillStyle = '#fff';
       octx.fillText(label, sx - tw / 2 + 5, sy - h / 2 - 14);
-      t.redAge = cls === 2 ? (t.redAge || 0) + (t.aiOK ? 2 : 1) : 0;  /* v29: 1 с устойчивости; v43: ИИ-подтверждённый — вдвое быстрее */
+      t.redAge = cls === 2 ? (t.redAge || 0) + (t.aiOK ? 3 : 1) : 0;  /* v29: 1 с устойчивости; v43: ИИ — быстрее; v49 (юзер-патч №2): ИИ✓ ×3 ≈ 0.45 с до красного */
       if (cls === 2 && !t.alerted && t.redAge >= 8) alertFound(t);
     }
     if (S.sweepHit) {  /* v37: блик на проходе — cyan-рамка «ВЕРНИТЕСЬ» 4 с */
@@ -1802,22 +1813,24 @@ const G = (function () {
     }
     let tblobs = blobs;  /* v42: буфер трекера (кап шторма блёсток + гейт смаза) */
     if (blobs.length > 25 && !S.evDim && phaseOn) S.evDim = true;  /* v44: яркая поверхность — давим экспозицией (блик близко/пересвечен — выживет) */
-    if (!S.demo && S.running && blobs.length > 25) {  /* v42: >25 блобов = фактурная
-       поверхность (слюда/глянец/обои): трекер не раздуваем (анти-«127 кандидатов»),
-       ИИ сам поднимает порог, счётчик пустых кадров не копится */
-      S.noBlob = 0; S.overN = (S.overN || 0) + 1; tblobs = [];
-      if (ts > (S.autoThPause || 0) && S.overN >= 5 && S.threshold < 248) {
-        S.threshold = Math.min(248, S.threshold + 6); S.overN = 0; S.autoThUp = true;
-        try { $('gThresh').value = S.threshold; $('gThreshVal').textContent = S.threshold; } catch (e) {}
-        banner('ИИ: много бликов — порог ' + S.threshold + '.');
-        addLog(now2(), 'ИИ: шторм блёсток — порог автоматически поднят до ' + S.threshold + ' (фактурная поверхность).', 1);
-      } else if (S.overN === 1 && ts - (S.stormChk || 0) > 10000) {
+    if (!S.demo && S.running && blobs.length > 25) {  /* v49 (юзер-патч №1): >25 блобов =
+       фактурная поверхность (клавиатура/слюда/обои). v42 выкидывал ВСЕ блобы (tblobs=[]) и
+       поднимал порог к 248 — трекер голодал, слабая линза 215–230 гасла (серия 26.11:
+       «Слишком много бликов», ноль подтверждений). Теперь: трекер получает ТОП-12 по
+       лэнс-скорингу (насыщенное микроядро area≤6 — приоритет, дальше по pk; штраф
+       крупным диффузным бликам), порог НЕ поднимаем — авто-цепочка boost/zoom сама
+       добирает чувствительность, когда бликов нет */
+      S.noBlob = 0; S.overN = (S.overN || 0) + 1;
+      tblobs = blobs.slice().sort((a, b) =>
+        (b.pk - 40 * Math.max(0, b.area - 6)) - (a.pk - 40 * Math.max(0, a.area - 6))).slice(0, 12);
+      if (S.overN === 1 && ts - (S.stormChk || 0) > 10000) {
         S.stormChk = ts;
         banner('Слишком много бликов — подойдите ближе.');
+        addLog(now2(), 'ИИ: шторм блёсток — отслеживаю 12 самых правдоподобных ядер; порог не поднимаю (слабая линза должна остаться видимой). Подойдите ближе: ядро линзы выделится размером.', 1);
       }
     } else S.overN = 0;
-    if (S.pcdx != null && Math.abs(S.pcdx) + Math.abs(S.pcdy || 0) > 23 && !S.demo) S.smearTs = ts;  /* v42: зафиксировали рывок */
-    if (tblobs.length && !S.demo && ts - (S.smearTs || 0) < 600) {  /* v42: окно 600 мс от рывка —
+    if (S.pcdx != null && Math.abs(S.pcdx) + Math.abs(S.pcdy || 0) > 25 && !S.demo) S.smearTs = ts;  /* v49 (юзер-патч №2): рывок — теперь >25px (было 23) */
+    if (tblobs.length && !S.demo && ts - (S.smearTs || 0) < 400) {  /* v49: окно 400 мс (было 600) —
        стартовые кадры фазы с неустановившейся корреляцией тоже смазаны, не копим их */
       tblobs = [];
       if (ts - (S.smearChk || 0) > 6000) { S.smearChk = ts; banner('Ведите телефон плавнее.'); }
@@ -1881,8 +1894,8 @@ const G = (function () {
       demoCanvas.style.display = ''; video.style.display = 'none';
       banner('ДЕМО (блик): «линза» вспыхивает в такт вспышке — подтвердится красным; «светодиод» горит всегда — останется кандидатом.');
     }
-    if (S.autoThUp) {  /* v42: порог, поднятый ИИ при шторме, — только на ту сессию */
-      S.autoThUp = false; S.threshold = 233;
+    {  /* v49: порог авто-штормом больше не поднимаем — сбрасывать нечего, дефолт 225 */
+      S.threshold = 225;
       try { $('gThresh').value = 233; $('gThreshVal').textContent = '233'; } catch (e) {}
     }
     S.boost = 0; S.noBlob = 0; S.zoom = 1; S.evDim = false;  /* v38/v41/v44: новая сессия — зум, порог и EV в норму */
