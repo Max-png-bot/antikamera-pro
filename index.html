@@ -62,14 +62,22 @@
     border:1px solid var(--line);border-radius:14px;overflow:hidden}
   .stage video,.stage canvas.src{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   .stage canvas.ov{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-  .stage .banner{position:absolute;left:10px;right:10px;top:10px;z-index:5;font-size:12px;
-    background:rgba(8,12,18,.8);border:1px solid var(--line);border-radius:10px;
-    padding:7px 10px;display:none;backdrop-filter:blur(4px)}
+  .stage .banner{position:absolute;left:10px;right:10px;bottom:8px;z-index:5;font-size:11.5px;
+    background:rgba(8,12,18,.82);border:1px solid var(--line);border-radius:8px;
+    padding:5px 9px;display:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* v46: компактная строка внизу видоискателя — полный текст всегда в журнале;
+     было: top:10px многострочный блок, перекрывал ~треть кадра */
   .stage .banner.show{display:block}
   .stage .hint{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:22px 14px 12px;
     font-size:12.5px;color:#cfe0f2;text-align:center;
     background:linear-gradient(transparent,rgba(4,6,10,.92));pointer-events:none}
-  .stage .torchind{position:absolute;right:10px;top:10px;z-index:6;font-size:11px;color:var(--acc)}
+  .stage .topbar{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:8px;
+    justify-content:space-between;align-items:flex-start;z-index:6;pointer-events:none}
+  .stage .topbar .torchind{position:static;font-size:11px;font-weight:700;
+    background:rgba(4,8,14,.68);padding:4px 8px;border-radius:6px;max-width:74%;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stage .topbar .torchind.mov{color:#cfe0f2}
+  .stage .topbar .torchind.tor{color:#fbbf24;max-width:26%}
 
   .row{display:flex;gap:8px;margin-top:10px}
   button{flex:1;border:1px solid var(--line);background:var(--card);color:var(--tx);
@@ -201,8 +209,10 @@
       <video id="gVideo" playsinline muted autoplay></video>
       <canvas class="ov" id="gOverlay"></canvas>
       <div class="banner" id="gBanner"></div>
-      <div class="torchind" id="gTorchind"></div>
-      <div class="torchind" id="gMovind"></div>
+      <div class="topbar">
+        <div class="torchind mov" id="gMovind"></div>
+        <div class="torchind tor" id="gTorchind"></div>
+      </div>
       <div class="hint" id="gHint">Включится камера и вспышка. Медленно ведите телефон:
         устойчивая яркая точка, мигающая в такт вспышке = возможная камера.</div>
     </div>
@@ -1456,7 +1466,7 @@ const G = (function () {
     $('gTorchind').textContent = (S.mode === 'blink' && S.running) ? (S.torch ? '⚡ ВСПЫШКА ВКЛ' : '· выкл') : '';
     /* v33: живой индикатор протяжки — скриншот теперь передаёт ДВИЖЕНИЕ
        (жалоба: «скрин не может передать протяжку» — теперь может) */
-    $('gMovind').textContent = (S.running && !S.demo) ? '→ движение ' + Math.round(S.netMo || 0) + ' px' + ((S.boost || 0) > 0 ? ' · ⚠ порог ' + ((S.boost || 0) >= 4 ? 150 : Math.max(205, S.threshold - S.boost * 8)) : '') + ((S.zoom || 1) > 1 ? ' · 🔍 зум ' + (S.zoom || 1) + '×' : '') : '';
+    $('gMovind').textContent = (S.running && !S.demo) ? '→ движение ' + Math.round(S.netMo || 0) + ' px' + ((S.boost || 0) > 0 ? ' · ⚠ порог ' + ((S.boost || 0) >= 4 ? 150 : Math.max(205, S.threshold - S.boost * 8)) : '') + ((S.zoom || 1) > 1 ? ' · 🔍 зум ' + (S.zoom || 1) + '×' : '') + (S.evDim ? ' · EV−2' : '') : '';
   }
   function alertFound(t) {
     if (S.firstRedF == null) S.firstRedF = S.pcf || 0;  /* v43: харнесс-метка кадра первого красного */
