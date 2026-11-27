@@ -104,3 +104,52 @@ SEO-файлы, контент), а для постов нужно одно жи
 2. v2-пакет в GitHub (2 минуты) — включает SEO-ассеты;
 3. Пикабу + 2–3 Telegram-чата про аренду (тексты в posts.md);
 4. Видео по video_scripts.md (главный канал массового охвата).
+
+## 🎯 Таргет-лист живых тредов (собран 27.11.2026 через поиск) + черновики честных ответов
+
+**Контекст рынка:** топ-ответы на Reddit про детекторы камер — «they're all scams».
+Наше отличие, которое надо называть ПЕРВЫМ: честные ограничения, открытый протокол
+исследований (LENS_RESEARCH), бесплатный старт, офлайн, нулевые разрешения.
+
+| Тред | Аудитория | Статус |
+|---|---|---|
+| r/digitalnomad — «Detecting hidden cameras in hotel, airbnb, etc» (16t6pu0) | цифровыеноминасты, Airbnb | живой, вечнозелёный |
+| r/privacy — «Airbnb: how to spot hidden cameras?» (ccfn0u) | приватность | живой, вечнозелёный |
+| r/hiddencameras — «What is the best app to use for finding hidden cameras??» (1hhfu4t) | прямая целевая | живой |
+| r/hiddencameras — «Any recommended apps to detect spy cams?» (1nmcyfb) | прямая целевая | живой |
+| r/hiddencameras — «Do hidden camera detector apps work or is it just a scam?» (1lnz6pz) | прямая целевая | живой |
+| r/LifeProTips — LPT: scan the room with phone camera at night (IR) | массовая | вечнозелёный |
+
+### Черновик ответа (правило: ВСЕГДА раскрывать «я — разработчик» — и Reddit-правила, и конверсия выше)
+
+> I'm the developer of a free web detector, so take this with a grain of salt — but
+> here's the honest physics breakdown, since most answers here are right that
+> magnetometer apps are junk:
+> - Magnetometer: 5-10cm range, finds screws, not lenses. Skip.
+> - RF: only finds transmitting cameras, false-positives on every router. Supporting method.
+> - IR (phone camera in the dark): only catches cameras with IR night vision, and
+>   many phones filter IR. Useful step, limited.
+> - Lens glare (retro-reflection): the method security pros actually recommend.
+>   The catch: your eye misses 2-4px dots in a dim room. That's what my app automates:
+>   the flash blinks in a rhythm, the detector only flags glints that blink in sync —
+>   gloss and chrome don't follow the rhythm, a lens does. Free, runs in the browser,
+>   everything is processed on-device, no permissions beyond the camera.
+> Full limitations doc is public (including where it does NOT work) — because "trust
+> but verify" is the whole point of this genre. Happy to answer physics questions.
+
+### Пост-кит Product Hunt (готов к запуску)
+- **Tagline:** Find hidden cameras with your phone — honest physics, no gimmicks
+- **Первая строка описания:** The two methods security experts actually recommend
+  (lens glare + thermal), automated. Free, offline PWA, 8 languages, zero uploads.
+- **Скрины:** видоискатель с красной рамкой «КАМЕРА?»; журнал ИИ-анализа;
+  гид-осмотр комнаты; настройка тепла.
+- **Голосовой пункт от разработчика:** «94 автотеста на синтетических сценах +
+  публичный протокол живых замеров. Мы честно пишем, где детектор НЕ работает —
+  этого жанра почти никто не делает».
+
+### Короткие посты (X/Telegram/стори)
+- «Объектив камеры возвращает свет точно назад (как катафот). Хром и глянец —
+  рассеянно. Наш детектор мигает вспышкой и ловит только синхронные блики.
+  Бесплатно, в браузере: antikamera-pro.onrender.com»
+- «"All hidden camera detector apps are scams" — справедливо про магнитометры.
+  Физика, которая реально работает, + что мы自动化: [линк на разбор]»
