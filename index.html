@@ -581,6 +581,7 @@ const G = (function () {
       if (area > maxA) { giants.push({ minX, maxX, minY, maxY }); continue; }  /* v19: пересвет при близком сканировании */
       const dimMode = S.evDim || (S.boost || 0) >= 4;  /* v45: яркости сдвинуты вниз */
       if (area < 2 || pk < (dimMode ? (area >= 3 ? 155 : 162) : (area >= 3 ? 236 : 242))) continue;  /* v19: 3+px — pk≥236 (просветные покрытия линз тусклее), 1–2px — ≥242 (шум матрицы); v45 dim: 155/162 */
+      if (!S.scanOn && area > 30) continue;  /* v50 (юзер №2): связное пятно >30px = зеркало/дисплей/глянцевая стена — не кандидат. Скрытая камера всегда крошечная (2–25px). Кап только в «Мерцании»: близкий скан ищет ядра в пересвете отдельным путём */
       const bw = maxX - minX + 1, bh = maxY - minY + 1;
       const fill = area / (bw * bh), asp = bw / bh;
       if (fill < 0.45 || asp < 0.3 || asp > 3.4) continue;
@@ -594,6 +595,7 @@ const G = (function () {
        пропускаем целиком. */
     visited.fill(0);  /* основной цикл уже замаркировал гигантов — сброс для прохода по ядрам */
     for (const g of giants) {
+      if (!S.scanOn) continue;  /* v50 (юзер №2): псевдо-ядра пересвета — только в «Анализе стены» (близкий скан). В «Мерцании» гигант 2–8% = дисплей ноутбука/монитора — оранжевых «блик» на нём быть не должно (5-й скриншот) */
       if ((g.maxX - g.minX + 1) * (g.maxY - g.minY + 1) > W * H * 0.08) continue;  /* v47: >8% кадра — зеркало/экран: псевдо-ядра не кандидаты (баг «блик на экране ноутбука»); 2–8% — пересвет близкого скана, ядра ищем */
       for (let y = g.minY; y <= g.maxY; y++) for (let x = g.minX; x <= g.maxX; x++) {
         const i0 = y * W + x;
@@ -637,6 +639,40 @@ const G = (function () {
     for (let i = 0; i < 8; i++) z += (f[i] - AIW.m[i]) / (AIW.s[i] || 1) * AIW.w[i];
     return 1 / (1 + Math.exp(-z));
   }
+  /* v50 (юзер №1): гироскоп — источник истины «телефон неподвижен». Пиксельная
+     корреляция при мигании вспышки ловит артефакты (242 px при неподвижном
+     телефоне): вспышка меняет яркостный профиль → ложный сдвиг → ложный
+     «быстрый проход», ложный смаз, ложные «кадры движения». Гироскопу вспышка
+     безразлична. DeviceOrientation: iOS требует requestPermission() из
+     пользовательского жеста — вызывается из start() по нажатию «Старт». */
+  function initGyro() {
+    if (S.gyroTry) return; S.gyroTry = true;
+    try {
+      const DOE = window.DeviceOrientationEvent;
+      if (DOE && DOE.requestPermission) {
+        DOE.requestPermission().then(function (r) { if (r === 'granted') listenGyro(); }).catch(function () {});
+      } else listenGyro();
+    } catch (e) {}
+    function listenGyro() {
+      window.addEventListener('deviceorientation', function (e) {
+        if (e.alpha == null && e.beta == null && e.gamma == null) return;
+        S.gyroOK = true;
+        const now = performance.now();
+        if (S.gyroTs) {
+          const dt = now - S.gyroTs;
+          if (dt > 40 && dt < 500) {
+            let da = Math.abs((e.alpha || 0) - (S.gyroA || 0)); if (da > 180) da = 360 - da;
+            const db = Math.abs((e.beta || 0) - (S.gyroB || 0)), dg = Math.abs((e.gamma || 0) - (S.gyroG || 0));
+            const rate = Math.sqrt(da * da + db * db + dg * dg) * 1000 / dt;  /* °/с */
+            S.gyroRate = S.gyroRate == null ? rate : S.gyroRate * .7 + rate * .3;
+          }
+        }
+        S.gyroTs = now; S.gyroA = e.alpha || 0; S.gyroB = e.beta || 0; S.gyroG = e.gamma || 0;
+      });
+    }
+  }
+  function gyroStatic() { return !!(S.gyroOK && (S.gyroRate || 0) < 1.5); }  /* <1.5°/с — рука неподвижна */
+
   function updateTracker(blobs, phaseOn, now) {
     const R = 11, used = new Set();
     const pairs = [];
@@ -675,6 +711,9 @@ const G = (function () {
     for (const [id, b] of pairs) {
       const t = tracker.get(id); used.add(id);
       if (t.scx !== undefined) { t.scx = b.cx + (S.pcur || 0); t.scy = b.cy + (S.pcurY || 0); }  /* v49: сценовая координата обновлена */
+      if (t.x0 === undefined) { t.x0 = b.cx; t.x1 = b.cx; t.y0 = b.cy; t.y1 = b.cy; }
+      else { if (b.cx < t.x0) t.x0 = b.cx; if (b.cx > t.x1) t.x1 = b.cx; if (b.cy < t.y0) t.y0 = b.cy; if (b.cy > t.y1) t.y1 = b.cy; }
+      t.xa = t.x1 - t.x0; t.ya = t.y1 - t.y0;  /* v50 (юзер №3): «в одном и том же месте ±12px» — кадровый диапазон за жизнь трека */
       if (t.miss === 0 && t.frames > 2) t.rel += Math.hypot((b.cx - t.pcx) - gx, (b.cy - t.pcy) - gy);  /* miss>0: за паузу движение неизвестно; v49: первые 2 кадра трека — gx после смены сцены неустойчив, мусор в rel не копим */
       t.pcx = b.cx; t.pcy = b.cy;
       t.frames++;
@@ -761,6 +800,20 @@ const G = (function () {
        параллакса) — хром/стекло/глянец «камеры» без движения. Насыщенный блик,
        который явно плывёт (rel/mf > порог+0.35), — НЕ камера, что бы ни показывало
        ядро. Без движения красного нет — только подсказка-«похоже» (см. loop). */
+    /* v50 (юзер №3): статичное подтверждение — БЕЗ требования «двигать телефон».
+       Компактный насыщенный блик (ядро ≤8×8, тёмный barrel, круглый C≥0.65)
+       мигнул в такт 3+ раза В ОДНОМ И ТОМ ЖЕ МЕСТЕ (кадровый диапазон ≤12px —
+       допуск юзера), телефон реально неподвижен (netMo<8 — иначе это проход
+       сектора, красный требует дуги) — красный сразу. Ловушка v34 «движение 0
+       → ждём параллакса» закрыта: навёл и держи. Плывущий блик (лак/глянец)
+       выскальзывается из ±12px и не краснеет; ИИ-вето (aiProb<0.5 в цикле)
+       гасит статичный шум. */
+    if (S.mode === 'blink' && !S.scanOn && syncOK(t) && t.on >= 3 && t.frames >= 12 &&
+        coreOK(t) && (t.contr || 0) >= 1.8 && (t.circ || 1) >= 0.65 &&
+        (t.xa || 0) <= 12 && (t.ya || 0) <= 12 && (S.netMo || 0) < 8) {
+      t.staticCand = 1;
+      return 2;
+    }
     const parThr = 0.45 + 0.35 * t.gpk;
     const mf2 = t.mframes >= 3 ? t.mframes : t.frames;  /* v29: медленный дрейф: кадров «движения» (gmag≥1.5) нет, но rel/frames валидна (сабпиксель) */
     if (syncOK(t) && shapeOK(t) && (S.demo || ((t.pmax || 0) - (t.pmin || 0)) >= 8) &&
@@ -1409,6 +1462,7 @@ const G = (function () {
          ИИ НЕ назначает красный сам (инварианты v37-задержки и v39-циркулярности
          держит classify) — он лишь УДВАИВАЕТ скорость набора redAge для уже
          красного пути (cls===2) и рано отсекает заведомый шум (cls===0). */
+      if (cls === 2 && t.staticCand && aip !== null && aip < 0.5) { cls = 1; t.staticCand = 0; }  /* v50: статичное красное требует ИИ-уверенности ≥0.5 — лак/шум с малой вероятностью остаются оранжевыми */
       if (aip !== null) {
         if (aip >= 0.8 && cls === 2 && syncOK(t) && shapeOK(t)) t.aiOK = 1;
         else if (aip <= 0.2 && cls === 0 && (t.frames || 0) >= 8 && !t.alerted && !S.scanOn && !S.demo) t.aiRej = 1;
@@ -1829,7 +1883,8 @@ const G = (function () {
         addLog(now2(), 'ИИ: шторм блёсток — отслеживаю 12 самых правдоподобных ядер; порог не поднимаю (слабая линза должна остаться видимой). Подойдите ближе: ядро линзы выделится размером.', 1);
       }
     } else S.overN = 0;
-    if (S.pcdx != null && Math.abs(S.pcdx) + Math.abs(S.pcdy || 0) > 25 && !S.demo) S.smearTs = ts;  /* v49 (юзер-патч №2): рывок — теперь >25px (было 23) */
+    if (gyroStatic() && (S.netMo || 0) > 8) S.netMo = 4;  /* v50 (юзер №1): гироскоп говорит «неподвижен» — пиксельный артефакт вспышки (242px) не считается движением: ни в индикаторе, ни в гейтах */
+    if (S.pcdx != null && Math.abs(S.pcdx) + Math.abs(S.pcdy || 0) > 25 && !S.demo && !gyroStatic()) S.smearTs = ts;  /* v49: рывок >25px; v50: гироскоп-статика = артефакт вспышки, не смаз */
     if (tblobs.length && !S.demo && ts - (S.smearTs || 0) < 400) {  /* v49: окно 400 мс (было 600) —
        стартовые кадры фазы с неустановившейся корреляцией тоже смазаны, не копим их */
       tblobs = [];
@@ -1843,6 +1898,7 @@ const G = (function () {
   /* ---- управление ---- */
   async function start(camera) {
     stopAll(); App.onModuleStart('glare');
+    try { initGyro(); } catch (e) {}  /* v50: гироскоп — истина о неподвижности (iOS-разрешение из жеста «Старт») */
     if (camera) {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
