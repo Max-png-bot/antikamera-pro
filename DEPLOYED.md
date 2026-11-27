@@ -1077,3 +1077,23 @@ Finder Pro (сетка+, «не видит за тёмным пластиком�
   поэтому главный месседж — честные ограничения + открытый протокол замеров;
 - Коммиты: 583df58…6366b94 (19 файлов) + ae1a26d (EN-статья). Прод проверен:
   новые статьи 200, og-image 200, sitemap 200, healthz OK.
+
+## Промо-пуш №2 — 2026-11-27 («делай всё сам»: автономный максимум)
+
+- **Telegraph:** создан новый аккаунт (токен — /home/user/telegraph_token.txt,
+  старый истёк); опубликованы 2 статьи с ссылками на главную и статьи-разборы —
+  индексируемые бэклинки с telegra.ph:
+  RU https://telegra.ph/Detektor-skrytyh-kamer-na-telefon-kakoj-metod-realno-rabotaet-11-27
+  EN https://telegra.ph/Do-hidden-camera-detector-apps-actually-work-The-physics-11-27
+- **5 локализаций статьи-разбора:** blog/zh-detect.html, ja-detect.html,
+  ko-detect.html, es-detect.html, pt-detect.html (полный мета-набор + JSON-LD);
+  hreflang-кластер из 7 языков связал все версии (RU/EN/ZH/JA/KO/ES/PT);
+- **sitemap:** 29 URL; **IndexNow:** +9/9 приняты (итого 33/33 за день);
+- **Wayback:** снапшот главной уже есть (27.11 08:29, авто-краулер); /save
+  из песочницы таймаутится — не критично;
+- **GitHub:** попытка выставить topics/description — PAT не имеет прав на
+  метаданные репо (403, contents-only) — пропущено;
+- Коммиты: 40f634b…d2fb431 (8 файлов). Прод: 5 новых статей 200, hreflang 7/7.
+- **Осталось только владельцу** (требует аккаунтов/денег, автоматизировать
+  нельзя): Google Search Console, Яндекс Вебмастер, домен, посты в Reddit
+  (аккаунт stablefi, тексты готовы в outreach_kit.md), Product Hunt (кит готов).
