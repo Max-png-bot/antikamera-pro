@@ -153,3 +153,11 @@ SEO-файлы, контент), а для постов нужно одно жи
   Бесплатно, в браузере: antikamera-pro.onrender.com»
 - «"All hidden camera detector apps are scams" — справедливо про магнитометры.
   Физика, которая реально работает, + что мы自动化: [линк на разбор]»
+
+## 🔗 Опубликовано автономно (27.11.2026, промо-пуш №2)
+- Telegraph RU: https://telegra.ph/Detektor-skrytyh-kamer-na-telefon-kakoj-metod-realno-rabotaet-11-27
+- Telegraph EN: https://telegra.ph/Do-hidden-camera-detector-apps-actually-work-The-physics-11-27
+- (Индексируемые бэклинки с telegra.ph на главную и обе статьи-разбора.
+  Новый токен аккаунта: /home/user/telegraph_token.txt)
+- 5 локализаций статьи-разбора: blog/{zh,ja,ko,es,pt}-detect.html + hreflang-кластер ×7
+- IndexNow: +9/9 URL приняты. Wayback: снапшот главной от 27.11 08:29 (авто-краулер).
