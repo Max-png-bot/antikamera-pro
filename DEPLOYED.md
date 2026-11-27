@@ -1054,3 +1054,26 @@ Finder Pro (сетка+, «не видит за тёмным пластиком�
   трек жив, нет ложного «быстрого прохода»), +M24 (пятно 24×16 → ноль треков,
   тишина). **sim 94/94.**
 - Деплой e5faabc, sw v35→v36.
+
+## Промо-пуш №1 — 2026-11-27 (SEO rich-results + контент + индексация)
+
+- **16 статей блога:** всем добавлены canonical, og:url/og:image/og:locale,
+  twitter:card (summary_large_image), JSON-LD Article (headline, image, dates,
+  inLanguage) — право на расширенные сниппеты в выдаче;
+- **Главная приложения:** +meta description, полный OG/Twitter-набор, canonical,
+  JSON-LD SoftwareApplication (SecurityApplication, 8 языков, isAccessibleForFree);
+- **sitemap.xml:** 24 URL + lastmod 2026-11-27;
+- **2 новые SEO-статьи** (уникальный материал из LENS_RESEARCH):
+  blog/ru-detektor.html — «Детектор скрытых камер на телефон: какой метод
+  реально работает» (магнитометр/RF/ИК/блик, таблица замеров, чек-лист выбора);
+  blog/en-how-detect.html — "Do hidden camera detector apps actually work?"
+  (зеркало на EN, таргет на запросы про скам-приложения);
+- **IndexNow: 24/24 URL приняты (HTTP 200)** — Bing и Яндекс уведомлены
+  (GET-формат, ключ валидирован по /80966fe….txt);
+- **outreach_kit.md:** таргет-лист 6 живых Reddit-тредов (r/hiddencameras,
+  r/privacy, r/digitalnomad, r/LifeProTips — собраны поиском 27.11),
+  черновик честного ответа (с раскрытием «я — разработчик»), PH-launch кит,
+  короткие посты. Рыночный инсайт: топ-ответы на Reddit — «they're all scams»,
+  поэтому главный месседж — честные ограничения + открытый протокол замеров;
+- Коммиты: 583df58…6366b94 (19 файлов) + ae1a26d (EN-статья). Прод проверен:
+  новые статьи 200, og-image 200, sitemap 200, healthz OK.
