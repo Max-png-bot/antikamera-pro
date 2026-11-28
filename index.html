@@ -572,6 +572,21 @@ const G = (function () {
     }
     visited.fill(0);
     const blobs = [], giants = [], maxA = W * H * 0.02;
+    /* v51 (адаптация юзер-патча: радиальный профиль ядра): кольцо r=7 вокруг
+       центра. Сигнатура линзы — ТЁМНЫЙ barrel-обод (LENS_RESEARCH: контраст
+       ядро/корпус) или тёмный фон. Оригинальные пороги патча (innerDrop≥22,
+       outerContr≥65) на тёмном фоне неразделимы (любой мелкий блик «резкий»),
+       а плоские блики светлых поверхностей ≥6×6 уже отсечены капом area>30.
+       Флаг sharp даёт блобу приоритет 1000+pk в топ-12 шторма — линза больше
+       НЕ вытесняется шумовыми точками (баг v49: штраф area душил линзу с юбкой). */
+    const coreSharp = (ix, iy) => {
+      if (ix < 7 || ix >= W - 7 || iy < 7 || iy >= H - 7) return 0;
+      const at = (x, y) => Math.max(d[(y * W + x) * 4], d[(y * W + x) * 4 + 1], d[(y * W + x) * 4 + 2]);
+      const r7 = [[-7, 0], [7, 0], [0, -7], [0, 7], [-5, -5], [5, -5], [-5, 5], [5, 5]];
+      let mn = 255;
+      for (let k = 0; k < 8; k++) { const v = at(ix + r7[k][0], iy + r7[k][1]); if (v < mn) mn = v; }
+      return mn <= 100 ? 1 : 0;  /* тёмный обод/фон = оптически изолированное ядро */
+    };
     for (let i = 0; i < W * H; i++) {
       if (!mask[i] || visited[i]) continue;
       let sp = 0; stack[sp++] = i; visited[i] = 1;
@@ -597,7 +612,8 @@ const G = (function () {
       const fill = area / (bw * bh), asp = bw / bh;
       if (fill < 0.45 || asp < 0.3 || asp > 3.4) continue;
       if (!edgeOK(sx / area, sy / area)) continue;  /* v48: край — не кандидат */
-      blobs.push({ cx: sx / area, cy: sy / area, w: bw, h: bh, mean: sb / area / 3, area, pk,
+      const shp = coreSharp(Math.round(sx / area), Math.round(sy / area));  /* v51: barrel-приоритет */
+      blobs.push({ cx: sx / area, cy: sy / area, w: bw, h: bh, mean: sb / area / 3, area, pk, sharp: shp,
         circ: area >= 16 ? 4 * Math.PI * area / (per * per) : 1 });  /* v39: округлённость, C=4πA/P²; линза ≈0.75–1, вытянутый блик <0.65 */
     }
     /* v19: гигантский блоб (вспышка залила кадр при близком сканировании) —
@@ -709,7 +725,7 @@ const G = (function () {
         tracker.set(id, { cx: b.cx, cy: b.cy, pcx: b.cx, pcy: b.cy, scx: b.cx + (S.pcur || 0), scy: b.cy + (S.pcurY || 0), w: b.w, h: b.h, mean: b.mean, pk: b.pk || 0,
           pmin: S.pcur, pmax: S.pcur,
           on: phaseOn ? 1 : 0, off: phaseOn ? 0 : 1, hits: 1, miss: 0, last: now, alerted: false,
-          rel: 0, frames: 0, mframes: 0, gpk: 0, hisat: b.hisat || 0, contr: b.contr || 0, bmiss: 0, gloss: false });
+          rel: 0, frames: 0, mframes: 0, gpk: 0, hisat: b.hisat || 0, contr: b.contr || 0, bmiss: 0, gloss: false, sharp: b.sharp || 0 });  /* v51 */
         used.add(id);
       }
     }
@@ -738,6 +754,7 @@ const G = (function () {
       if ((b.blu || 0) > (t.blu || 0)) t.blu = b.blu;  /* v31: максимум AR-хромы за жизнь */
       if ((b.contr || 0) > (t.contr || 0)) t.contr = b.contr;  /* v25: максимум контраста barrel */
       if ((b.circ || 0) > (t.circ || 0)) t.circ = b.circ;  /* v39: максимум округлённости */
+      if ((b.sharp || 0) > (t.sharp || 0)) t.sharp = b.sharp;  /* v51: barrel-приоритет за жизнь трека */
       t.cx = t.cx * .7 + b.cx * .3; t.cy = t.cy * .7 + b.cy * .3;
       t.w = t.w * .7 + b.w * .3; t.h = t.h * .7 + b.h * .3;
       t.mean = t.mean * .7 + b.mean * .3; t.pk = Math.max(t.pk * .95, b.pk || 0);
@@ -1456,19 +1473,29 @@ const G = (function () {
         banner('Блики размыты — камера не в фокусе: коснитесь экрана для фокуса и держите 30–50 см от предмета.');
       }
     }
-    let potRed = 0;
+    let potF = 0, potQ = 0;  /* v51: двухуровневое глосс-поле. potF = ЛЮБЫЕ синхронные дуговые
+       (клавиатура при ведении: hisat 0, но их много и все «в такт + на стене»); potQ = из них
+       качественные ядра (hisat+contr). Правило: potF≥6 гасит некачественные треки поля,
+       potQ≥6 гасит всё (россыпь лака одинаковых ядер); ОДИНОЧНОЕ качественное ядро в поле
+       (1–5) — потенциальная линза и краснеет (сценарий «клавиатура + настоящая камера») */
     for (const t of tracker.values()) {
       if (t.arcMin > 4 && syncOK(t) && shapeOK(t) && t.mframes >= 5 &&
-          ((t.pmax || 0) - (t.pmin || 0)) >= (t.arcMin || 14) &&
-          (t.hisat || 0) >= 0.4 && (t.contr || 0) >= 1.8 && t.frames >= 10) potRed++;
+          ((t.pmax || 0) - (t.pmin || 0)) >= (t.arcMin || 14) && t.frames >= 10) {
+        potF++;
+        if ((t.hisat || 0) >= 0.4 && (t.contr || 0) >= 1.8) potQ++;
+      }
     }
-    const glossField = potRed >= 6;
+    const glossField = potF >= 6;
     if (glossField && Date.now() - (S.glossFieldTs || 0) > 8000) {
       S.glossFieldTs = Date.now();
       addLog(now2(), 'ИИ-анализ: множество одновременных бликов — глянцевая или лакированная поверхность (картина, мебель, стекло), исключена из выборки.', 1);
     }
     for (const [id, t] of tracker) {
-      let cls = (glossField && t.arcMin > 4) ? Math.min(classify(t), 1) : classify(t);
+      let cls = classify(t);
+      {  /* v51: двухуровневое подавление глянца (см. potF/potQ выше) */
+        const lensQ = (t.hisat || 0) >= 0.4 && (t.contr || 0) >= 1.8;
+        if (cls === 2 && t.arcMin > 4 && (potQ >= 6 || (glossField && !lensQ))) cls = 1;
+      }
       const aip = S.aiOff ? null : aiProb(t);  /* v43: ИИ-верификация трека.
          ИИ НЕ назначает красный сам (инварианты v37-задержки и v39-циркулярности
          держит classify) — он лишь УДВАИВАЕТ скорость набора redAge для уже
@@ -1887,7 +1914,8 @@ const G = (function () {
        добирает чувствительность, когда бликов нет */
       S.noBlob = 0; S.overN = (S.overN || 0) + 1;
       tblobs = blobs.slice().sort((a, b) =>
-        (b.pk - 40 * Math.max(0, b.area - 6)) - (a.pk - 40 * Math.max(0, a.area - 6))).slice(0, 12);
+        (((b.hisat || 0) >= 0.4 && (b.contr || 0) >= 1.8 ? 2000 : 0) + (b.sharp ? 1000 : 0) + b.pk - 40 * Math.max(0, b.area - 6)) -
+        (((a.hisat || 0) >= 0.4 && (a.contr || 0) >= 1.8 ? 2000 : 0) + (a.sharp ? 1000 : 0) + a.pk - 40 * Math.max(0, a.area - 6))).slice(0, 12);  /* v51: трёхуровневый приоритет: оптическое качество ядра (hisat+contr, натив) > barrel-изоляция > pk; диффузные — с area-штрафом */
       if (S.overN === 1 && ts - (S.stormChk || 0) > 10000) {
         S.stormChk = ts;
         banner('Слишком много бликов — подойдите ближе.');
